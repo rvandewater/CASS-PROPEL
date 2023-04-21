@@ -1,0 +1,190 @@
+,column_name,endpoint,data_type,input_time,drop
+0,Zugang,False,C,pre,False
+1,Tumorentität,False,C,pre,False
+2,intest/diff,False,C,pre,False
+3,HIPAC,False,B,pre,False
+4,Vorbehandlung,False,B,pre,False
+5,Sex,False,B,pre,False
+6,AgeAtSurgery,False,N,pre,False
+7,Größe in m,False,N,pre,False
+8,Gewicht in kg,False,N,pre,False
+9,BMI,False,N,pre,False
+10,ASA,False,C,pre,False
+11,Functional_status,False,C,pre,False
+12,Hepatose,False,B,pre,False
+13,Lungenerkrankung,False,B,pre,False
+14,Diabetes,False,B,pre,False
+15,ZNS_NE,False,B,pre,False
+16,KHK,False,B,pre,False
+17,Herzinsuffizienz,False,B,pre,False
+18,Herzrhythmusstörung,False,B,pre,False
+19,Herzklappenerkrankung,False,B,pre,False
+20,aHt,False,B,pre,False
+21,paVk,False,B,pre,False
+22,Gerinnungsstörung,False,B,pre,False
+23,Infektionserkrankung,False,B,pre,False
+24,Autoimmunerkrankung,False,B,pre,False
+25,TumorCode,False,C,pre,False
+26,T-Stadium,False,C,pre,False
+27,Natrium,False,N,pre,False
+28,Kalium,False,N,pre,False
+29,GFR,False,C,pre,False
+30,Harnstoff,False,N,pre,False
+31,Kreatinin,False,N,pre,False
+32,Albumin,False,N,pre,False
+33,TSH,False,N,pre,False
+34,GPT,False,N,pre,False
+35,GOT,False,N,pre,False
+36,Bilirubin,False,N,pre,False
+37,Gamma-GT,False,N,pre,False
+38,Lipase,False,N,pre,False
+39,CRP,False,N,pre,False
+40,Hämoglobin,False,N,pre,False
+41,Leukozyten,False,N,pre,False
+42,Thrombozyten,False,N,pre,False
+43,Hämatokrit,False,N,pre,False
+44,Quick,False,N,pre,False
+45,INR,False,N,pre,False
+46,aPTT,False,N,pre,False
+47,CEA,False,N,pre,False
+48,CA 19-9,False,N,pre,False
+49,AFP,False,N,pre,False
+50,Erythrozyten,False,N,pre,False
+51,pH,False,N,,False
+52,Lactat,False,N,,False
+53,SBE,False,N,,False
+54,Glucose,False,N,,False
+55,HCO3,False,N,,False
+56,tHb,False,N,,False
+57,pcO2,False,N,,False
+58,pO2,False,N,,False
+59,Hct,False,N,,False
+60,Na+,False,N,,False
+61,K+,False,N,,False
+62,Natrium.1,False,N,,False
+63,Kalium.1,False,N,,False
+64,GFR.1,False,C,,False
+65,Harnstoff.1,False,N,,False
+66,Kreatinin.1,False,N,,False
+67,GPT.1,False,N,,False
+68,GOT.1,False,N,,False
+69,Bilirubin.1,False,N,,False
+70,Gamma-GT.1,False,N,,False
+71,Lipase.1,False,N,,False
+72,CRP.1,False,N,,False
+73,Hämoglobin.1,False,N,,False
+74,Leukozyten.1,False,N,,False
+75,Thrombozyten.1,False,N,,False
+76,Hämatokrit.1,False,N,,False
+77,Quick.1,False,N,,False
+78,INR.1,False,N,,False
+79,aPTT.1,False,N,,False
+80,Erythrozyten.1,False,N,,False
+81,Anti-Xa-Aktivitaet,False,N,,False
+82,Natrium.2,False,N,,False
+83,Kalium.2,False,N,,False
+84,GFR.2,False,C,,False
+85,Harnstoff.2,False,N,,False
+86,Kreatinin.2,False,N,,False
+87,GPT.2,False,N,,False
+88,GOT.2,False,N,,False
+89,Bilirubin.2,False,N,,False
+90,Gamma-GT.2,False,N,,False
+91,Lipase.2,False,N,,False
+92,CRP.2,False,N,,False
+93,Hämoglobin.2,False,N,,False
+94,Leukozyten.2,False,N,,False
+95,Thrombozyten.2,False,N,,False
+96,Hämatokrit.2,False,N,,False
+97,Quick.2,False,N,,False
+98,INR.2,False,N,,False
+99,aPTT.2,False,N,,False
+100,Erythrozyten.2,False,N,,False
+101,LipaseDrainPOD1,False,N,,False
+102,BiliDrain_POD1,False,N,,False
+103,Monats_Temperatur,False,N,intra,True
+104,Niederschlag,False,N,intra,True
+105,Sonnenschein,False,N,intra,True
+106,Wochentag,False,C,intra,True
+107,OP-Datum_Naht,False,N,intra,True
+108,OP-Dauer in min,False,N,intra,False
+109,Dringlichkeit,False,C,,True
+110,Operateur,False,C,intra,False
+111,Art_Pankreasresektion,False,C,,False
+112,Pankreasreko,False,B,,False
+113,Art-Leberresektion,False,C,,False
+114,Art_Ösophagusresektion,False,C,,False
+115,Art_Ösophagusanastomose,False,C,,False
+116,Art_Magenresektion,False,B,,False
+117,Art_Magenrekonstruktion,False,C,,False
+118,Art_Dünndarmresektion,False,C,,False
+119,Dünndarmanastomose,False,B,,False
+120,Art_Kolonresektion,False,C,,False
+121,Kolonanastomose,False,B,,False
+122,Art_Rektumresektion,False,B,,False
+123,Rektumanastomose,False,B,,False
+124,Stomarueckverlagerung,False,B,,False
+125,Wiederanschluss,False,B,,False
+126,Cholezystektomie,False,B,,False
+127,Cholezystektomie im Rahmen,False,B,,False
+128,Lungenresektion,False,B,,False
+129,Niereresektion,False,B,,False
+130,Andere Organe/Delbuking,False,B,,False
+131,Gefäßresektion,False,B,,False
+132,BDA,False,B,,False
+133,Splenektomie,False,B,,False
+134,Simultane Hernienversorgung,False,B,,False
+135,Simultane Ablation,False,B,,False
+136,Stoma-Anlage,False,B,,False
+137,HIPAC.1,False,B,,False
+138,Approach,False,C,,False
+139,ReOps,True,B,,True
+140,N Eks (310 ml),False,N,intra,False
+141,N FFPs (220 ml),False,N,intra,False
+142,N TKs (240 ml),False,N,intra,False
+143,Hct-based BL (ml),False,N,intra,False
+144,HB based blood loss,False,N,intra,False
+145,OSTHEO BL,False,N,intra,False
+146,MittelwertBL,False,N,intra,False
+147,SAPS-II_POD1,False,N,post,False
+148,Nights on ICU,True,N,,True
+149,LOS,True,N,,True
+150,Re-Admission ICU,True,B,,False
+151,Komplikation >= Clavien/Dindo,True,B,,True
+152,Clavien/Dindo,True,C,,True
+153,Beatmungstunden,True,N,,True
+154,Traceotomie,True,B,,True
+155,NO-Beatmung,True,B,,True
+156,Angio,True,B,,True
+157,Insuffizienzen Pankreas,True,B,,True
+158,Insuffizienzen Verdauungstrakt,True,B,,False
+159,Insuffizienzen Gallewege,True,B,,True
+160,Death within primary stay,True,B,,False
+161,30 day mortality,True,B,,True
+162,LOS>28d,True,B,,False
+163,LOS>42d,True,B,,False
+164,LOS>21d,True,B,,False
+165,AF_24hpost_op_min,False,N,dyn,False
+166,AF_24hpost_op_max,False,N,dyn,False
+167,AF_24hpost_op_mean,False,N,dyn,False
+168,HF_24hpost_op_min,False,N,dyn,False
+169,HF_24hpost_op_max,False,N,dyn,False
+170,HF_24hpost_op_mean,False,N,dyn,False
+171,BDs_24hpost_op_min,False,N,dyn,False
+172,BDs_24hpost_op_max,False,N,dyn,False
+173,BDs_24hpost_op_mean,False,N,dyn,False
+174,SaO2_24hpost_op_min,False,N,dyn,False
+175,SaO2_24hpost_op_max,False,N,dyn,False
+176,SaO2_24hpost_op_mean,False,N,dyn,False
+177,pH_24hpost_op_min,False,N,dyn,False
+178,pH_24hpost_op_max,False,N,dyn,False
+179,pH_24hpost_op_mean,False,N,dyn,False
+180,pCO2_24hpost_op_min,False,N,dyn,False
+181,pCO2_24hpost_op_max,False,N,dyn,False
+182,pCO2_24hpost_op_mean,False,N,dyn,False
+183,T1_24hpost_op_min,False,N,dyn,False
+184,T1_24hpost_op_max,False,N,dyn,False
+185,T1_24hpost_op_mean,False,N,dyn,False
+186,Laktat_24hpost_op_min,False,N,dyn,False
+187,Laktat_24hpost_op_max,False,N,dyn,False
+188,Laktat_24hpost_op_mean,False,N,dyn,False
