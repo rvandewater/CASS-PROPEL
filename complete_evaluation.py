@@ -146,7 +146,7 @@ def get_parser():
                         help='the dataset to process')
     parser.add_argument('--feature_set', '-f', nargs='*', type=str, choices=['pre', 'intra', 'post', 'dyn'],
                         help='if given, processes only features from all provided feature sets')
-    parser.add_argument('--external_testset', '-e', type=bool, action='store_true',
+    parser.add_argument('--external_testset', '-e', action='store_true',
                         help='if specified, external validation dataset will be used as test data')
     parser.add_argument('--out_dir', '-o', type=str,
                         help='output directory')
