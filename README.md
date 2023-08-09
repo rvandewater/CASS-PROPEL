@@ -16,7 +16,7 @@ Clone repository \
 ```cd PROPEL```
 
 Create virtual environment based on Python 3.8 and activate it (e.g., using Conda) \
-```conda env create --name {name_of_your_choice} python=3.8``` \
+```conda create --name {name_of_your_choice} python=3.8``` \
 ```conda activate {name_of_your_choice}```
 
 Install requirements \
