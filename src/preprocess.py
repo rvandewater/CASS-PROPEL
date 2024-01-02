@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import logging as log
 from sklearn.preprocessing import StandardScaler
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
@@ -51,9 +52,8 @@ def get_preprocessed_data(data: Dataset,
         X, Y = data.get_data()
     else:
         X, Y = data.get_val_data()
-        if (validation):
+        if validation:
             validation_samples = X.shape[0]
-        # X["Vorbehandlung"]=X["Vorbehandlung"].astype("int")
         # Get original data and append (in order for proper one-hot encoding)
         X_or, Y_or = data.get_data()
         X = pd.concat([X, X_or], ignore_index=True)
@@ -75,7 +75,8 @@ def get_preprocessed_data(data: Dataset,
     for binary_col in data.get_binary_features():
         if binary_col in X.columns:
             unique_vals = list(np.unique(X[binary_col].values))
-            assert len(unique_vals) <= 2
+            if len(unique_vals) < 2:
+                raise AssertionError(f"Binary column {binary_col} has less than 2 unique values.")
             if len(unique_vals) != 1 and unique_vals != [0, 1]:
                 if verbose:
                     print(f'Renaming entries from {binary_col}: {unique_vals[0]} -> 0; {unique_vals[1]} -> 1')
@@ -103,6 +104,8 @@ def get_preprocessed_data(data: Dataset,
         imputer = IterativeImputer(max_iter=1000, verbose=verbose)
         X_numerical = imputer.fit_transform(X_numerical)
         X_numerical = pd.DataFrame(X_numerical, columns=X_numerical_feature_names)
+        print("Imputing binary features...")
+        X_binary = X_binary.fillna(value=0)
 
     if normalise:
         print('Normalising numerical features...')

@@ -80,6 +80,7 @@ def evaluate_single_model(model, param_grid,
         cv_scoring = "average_precision"
     grid_model = GridSearchCV(pipeline, param_grid=param_grid, scoring=cv_scoring, verbose=False, cv=cv, n_jobs=-1, error_score=0)
     grid_model.fit(X_train, y_train)
+    print("Fitted model")
     try:
         pass
     except ValueError as ve:

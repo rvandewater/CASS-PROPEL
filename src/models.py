@@ -7,7 +7,7 @@ from sklearn.tree import DecisionTreeClassifier
 
 
 def get_classification_model_grid(class_weighting=None, seed=42):
-    return [(DummyClassifier(strategy='prior', random_state=seed), {}),
+    return [(DummyClassifier(strategy='constant', constant=1, random_state=seed), {}),
             (DecisionTreeClassifier(class_weight=class_weighting, random_state=seed),
              {'max_depth': [5, 10, None],
               'max_features': ['sqrt', 'log2', None],
