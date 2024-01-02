@@ -1,9 +1,8 @@
 import pandas as pd
 import numpy as np
-import logging as log
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer
+from sklearn.impute import IterativeImputer, KNNImputer, SimpleImputer
 
 from src.utils.feature_selector import FeatureSelector
 from src.data.abstract_dataset import Dataset
@@ -13,7 +12,8 @@ def get_preprocessed_data(data: Dataset,
                           fs_operations=None,
                           missing_threshold=0.5,
                           correlation_threshold=0.95,
-                          impute=True, normalise=True,
+                          imputer="knn",
+                          normaliser='standard',
                           verbose=False,
                           validation=False):
     """Return X and Y after applying specified preprocessing steps
@@ -45,7 +45,7 @@ def get_preprocessed_data(data: Dataset,
         The endpoints
     """
     if fs_operations is None:
-        fs_operations = ['missing', 'single_unique', 'collinear']
+        fs_operations = [] #['missing', 'single_unique', 'collinear']
 
     # Choice of validation dataset
     if not validation:
@@ -86,10 +86,10 @@ def get_preprocessed_data(data: Dataset,
     print(data.get_categorical_features())
     categorical_features = [col for col in X.columns if col in data.get_categorical_features()]
     X[categorical_features] = X[categorical_features].fillna(value=0)
-    if "Vorbehandlung" in X.columns:
-        X["Vorbehandlung"] = X["Vorbehandlung"].astype("int")
-    if "Histologie" in X.columns:
-        X["Histologie"] = X["Histologie"].astype("int")
+    # if "Vorbehandlung" in X.columns:
+    #     X["Vorbehandlung"] = X["Vorbehandlung"].astype("int")
+    # if "Histologie" in X.columns:
+    #     X["Histologie"] = X["Histologie"].astype("int")
 
     # One-hot-encode categorical features
     X = pd.get_dummies(X, columns=categorical_features, dummy_na=False)
@@ -99,17 +99,31 @@ def get_preprocessed_data(data: Dataset,
 
     X_numerical_feature_names = X_numerical.columns
     # Interpolate numerical features
-    if impute:  # todo possibly include more and other imputation options
-        print('Running IterativeImputer...')
-        imputer = IterativeImputer(max_iter=1000, verbose=verbose)
+    if imputer is not None:
+        print(f'Running {imputer} Imputer...')
+        if imputer == 'iterative':
+            imputer = IterativeImputer(max_iter=1000, verbose=verbose)
+        elif imputer == 'knn':
+            imputer = KNNImputer(n_neighbors=5, weights='uniform')
+        elif imputer in ['mean', 'median']:
+            imputer = SimpleImputer(strategy=imputer)
+        else:
+            raise ValueError(f'Imputer type {imputer} not supported')
         X_numerical = imputer.fit_transform(X_numerical)
         X_numerical = pd.DataFrame(X_numerical, columns=X_numerical_feature_names)
         print("Imputing binary features...")
         X_binary = X_binary.fillna(value=0)
 
-    if normalise:
-        print('Normalising numerical features...')
+    if normaliser is not None:
         # Normalise numerical features
+        print('Normalising numerical features...')
+        if normaliser == 'standard':
+            scaler = StandardScaler()
+        elif normaliser == 'minmax':
+            scaler = MinMaxScaler()
+        else:
+            raise ValueError(f'Normaliser type {normaliser} not supported')
+        X_numerical = scaler.fit_transform(X_numerical)
         standardScaler = StandardScaler()
         X_numerical = standardScaler.fit_transform(X_numerical)
         X_numerical = pd.DataFrame(X_numerical, columns=X_numerical_feature_names)

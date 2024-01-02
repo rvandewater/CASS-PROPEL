@@ -13,14 +13,21 @@ def get_parser():
     parser.add_argument('--feature_set', '-f', nargs='*', type=str, choices=['pre', 'intra', 'post', 'dyn'],
                         help='if given, processes only features from all provided feature sets')
     parser.add_argument('--external_testset', '-e', action='store_true',
-                        help='if specified, external validation dataset will be used as test data')
+                        help='If specified, external validation dataset will be used as test data')
+    parser.add_argument('--imputer', '-i', choices=['iterative', 'knn', 'mean'], nargs='?', const='knn', default=None,
+                        help='Which imputer to use for missing values')
+    parser.add_argument('--normaliser', '-n', choices=['standard', 'minmax'], nargs='?', const='standard', default=None,
+                        help='Which normaliser to use to scale numerical values')
+    parser.add_argument('--feature_selectors', '-fs', choices=['missing', 'single_unique', 'collinear'], nargs='*',
+                        default=['missing', 'single_unique', 'collinear'],
+                        help='Which feature selection functions to use. Do not specify for all, use flag without args for none.')
     parser.add_argument('--out_dir', '-o', type=str,
                         help='output directory')
     parser.add_argument('--no_features_dropped', '-nfd', action='store_false', dest='drop_features',
                         help='deactivates dropping predefined features in dataframe')
     parser.add_argument('--no_feature_selection', '-nfs', action='store_false', dest='select_features',
                         help='deactivates feature selection in pipeline')
-    parser.add_argument('--cv_splits', '-cv', type=int, default=8,
+    parser.add_argument('--cv_splits', '-cv', type=int, default=10,
                         help='number of cross_validation splits; 1 denotes LOO-CV')
     parser.add_argument('--shap_eval', '-sh', type=bool, default=False,
                         help='if true, shap values will be evaluated. Disabled by default, since it increases runtime a lot.')
@@ -46,4 +53,5 @@ def get_parser():
 if __name__ == '__main__':
     arg_parser = get_parser()
     args = arg_parser.parse_args()
+    print(args)
     evaluation(args)

@@ -205,9 +205,9 @@ class Dataset:
         # Assert the length of the intersection
         assert len(
             set(original_data.columns).intersection(set(self.get_all_features() + self.get_all_endpoints()))) == len(
-            set(original_data.columns)), \
-            [col for col in original_data.columns if col not in set(original_data.columns).intersection(
-                set(self.get_all_features() + self.get_all_endpoints()))]
+            set(original_data.columns)), "Column set doesn't match: " + \
+            str([col for col in original_data.columns if col not in set(original_data.columns).intersection(
+                set(self.get_all_features() + self.get_all_endpoints()))])
 
         drop_columns_list = []
         # Drop the columns that are not in the validation data
@@ -227,7 +227,7 @@ class Dataset:
             print(list(set(self.data_infos.column_name.values).difference(set(original_data.columns.values))))
             difference = list(set(self.data_infos.column_name.values).difference(set(original_data.columns.values)))
             self.data_infos = self.data_infos[~self.data_infos["column_name"].isin(difference)]
-        original_data.drop(columns=drop_columns_list, inplace=True)
+        original_data.drop(columns=drop_columns_list, inplace=True, errors='ignore')
 
         if drop_missing_value > 0:
             # Calculate the minimum amount of columns that have to contain a value

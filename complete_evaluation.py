@@ -41,8 +41,11 @@ def evaluation(args):
 
     # Preprocess data
     X, Y = get_preprocessed_data(data,
+                                 fs_operations=args.feature_selectors,
                                  missing_threshold=args.missing_threshold,
                                  correlation_threshold=args.correlation_threshold,
+                                 imputer=args.imputer,
+                                 normaliser=args.normaliser,
                                  verbose=True,
                                  validation=False)
     print("=========================================== Preprocessing complete ===========================================")
@@ -54,7 +57,10 @@ def evaluation(args):
                                              verbose=True, validation=True)
         print(X_val.columns.difference(X.columns))
         # Get rid of extra columns introduced by values in validation dataset
+        print(f'Dropping columns in val data since they are missing in train data: {X_val.columns.difference(X.columns)}')
         X_val = X_val.drop(set(X_val.columns.difference(X.columns)), axis=1)
+        assert len(X.columns.difference(
+            X_val.columns)) == 0, f'Error: Train data includes columns {X.columns.difference(X_val.columns)} that are missing in val data'
 
     all_metrics_list = all_classification_metrics_list
 

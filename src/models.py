@@ -35,10 +35,11 @@ def get_classification_model_grid(class_weighting=None, seed=42):
               'dual': [False, True],
               'loss': ['hinge', 'squared_hinge'],
               'C': [0.1, 0.5, 1.0, 10.0, 100.0]}),
-            (MLPClassifier(max_iter=5000, solver='sgd', random_state=seed),
-             {'hidden_layer_sizes': [(10,), (50,), (100,), (50, 10), (50, 50), (100, 50)],
-              'activation': ['logistic', 'relu', 'identity'],
-              'batch_size': [32, 'auto'],
+            (MLPClassifier(max_iter=500, solver='sgd', random_state=seed),
+             {'hidden_layer_sizes': [(128, 64), (64, 32), (32, 16), (32, 32), (64,), (32,), (16,)],
+              'activation': ['relu', 'logistic', 'identity'],
+              'momentum': [0.0, 0.9],
+              'batch_size': [8, 32, 'auto'],
               'learning_rate_init': [0.1, 0.05, 0.01, 0.005, 0.001]})
             ]
 
