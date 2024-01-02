@@ -99,6 +99,7 @@ def get_preprocessed_data(data: Dataset,
 
     X_numerical_feature_names = X_numerical.columns
     # Interpolate numerical features
+
     if imputer is not None:
         print(f'Running {imputer} Imputer...')
         if imputer == 'iterative':
