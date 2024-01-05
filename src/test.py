@@ -2,15 +2,16 @@ import graphviz
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+from sklearn import tree
 from sklearn.metrics import f1_score, auc
-from sklearn.tree import export_graphviz
-
+import logging as log
 from src.models import get_feature_importance, positive_class_probability
 from src.utils.metrics import compute_classification_metrics
 from src.utils.plot import plot_coefficients, plot_roc_pr_curve, plot_confusion_matrix, plot_calibration_curves
 
 
 def test_classification_model(model, X_train, y_train, X_test, y_test, model_name, select_features, out_dir):
+
     # Re-fit complete training set
     model.fit(X_train, y_train)
 
@@ -46,7 +47,7 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
         feature_names = X_train.columns[model.named_steps['selector'].get_support()]
         with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
             f.write(f'selected features: {feature_names}\n')
-        print(f'Selected features: {feature_names}')
+        log.info(f'Selected features: {feature_names}')
     else:
         feature_names = X_train.columns
 
@@ -55,13 +56,11 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
         feature_importance.to_csv(f'{out_dir}/{y_test.name.replace(" ", "_")}/{model_name}_feature_importance.csv')
         plot_coefficients(out_dir, feature_importances, feature_names, model_name, y_test.name)
 
-    # ===== Decision Tree =====
+    #===== Decision Tree =====
     if model_name == 'DecisionTreeClassifier':
-        dot_data = export_graphviz(model.named_steps['model'], feature_names=feature_names, filled=True, rounded=True)
-        graph = graphviz.Source(dot_data)
-        graph.render(filename=f'{out_dir}/{y_train.name.replace(" ", "_")}/test/{model_name}_tree', format='png')
-        graph.render(filename=f'{out_dir}/{y_train.name.replace(" ", "_")}/test/{model_name}_tree', format='png')
-
+        # plt.figure(figsize=(12, 12))
+        tree.plot_tree(model.named_steps['model'], feature_names=feature_names, filled=True, rounded=True, fontsize=10)
+        plt.savefig(f'{out_dir}/{y_train.name.replace(" ", "_")}/test/{model_name}_tree.pdf'.replace(' ', '_'), bbox_inches='tight')
     # ===== Calibration Curves =====
     if not (model_name == 'LinearSVC'):
         plot_calibration_curves(X_test, y_test, y_train.name, model, model_name, out_dir)

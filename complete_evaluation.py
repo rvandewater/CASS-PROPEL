@@ -5,13 +5,15 @@ import time
 import random
 from array import array
 from datetime import datetime
+
+import sklearn.metrics
 import wandb
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 
 from src.data import get_data_from_name
-from src.preprocess import get_preprocessed_data
+from src.preprocess import common_preprocessing
 from src.models import get_classification_model_grid
 from src.evaluate import evaluate_single_model
 from src.utils.metrics import all_classification_metrics_list
@@ -25,22 +27,11 @@ from xgboost import XGBClassifier
 bars = '====================='
 
 
-def evaluation(seed, out_dir, dataset, feature_set, external_test_data, imputer, normaliser, feature_selectors, drop_features,
-               select_features, cv_splits, shap_eval, test_fraction, balancing_option, drop_missing_value, missing_threshold,
-               correlation_threshold, data_exploration, cores):
-    # Setup output directory
-    seed = seed
-    np.random.seed(seed)
-    random.seed(seed)
-    if out_dir is None:
-        feature_set_string = '' if feature_set is None else f'_{"_".join(feature_set)}'
-        out_dir = f'results_{dataset}{feature_set_string}_{str(datetime.now().strftime("%Y-%m-%d_T_%H-%M-%S"))}_seed_{seed}'
-    else:
-        feature_set_string = '' if feature_set is None else f'_{"_".join(feature_set)}'
-        out_dir = f'{out_dir}/results_{dataset}{feature_set_string}_{str(datetime.now().strftime("%Y-%m-%d_T_%H-%M-%S"))}_seed_{seed}'
-    log.info(f"Logging results to: {out_dir}")
-    os.makedirs(f'{out_dir}', exist_ok=True)
-    os.makedirs(f'{out_dir}/data_frames', exist_ok=True)
+def evaluation(seed, out_dir, dataset, feature_set, external_test_data, imputer, normaliser, drop_features,
+               select_features, cv_splits, shap_eval, test_fraction, balancing_option, drop_missing_value, data_exploration,
+               missing_threshold, correlation_threshold, cores):
+
+    out_dir, seed = setup_output_directory(dataset, feature_set, out_dir, seed)
 
     # Get DataInformation object for the specified task
     data = get_data_from_name(dataset)
@@ -50,27 +41,19 @@ def evaluation(seed, out_dir, dataset, feature_set, external_test_data, imputer,
                out_dir=out_dir, exploration=data_exploration, external_validation=external_test_data)
 
     # Preprocess data
-    X, Y = get_preprocessed_data(data,
-                                 # fs_operations=feature_selectors,
-                                 # missing_threshold=missing_threshold,
-                                 # correlation_threshold=correlation_threshold,
-                                 imputer=imputer,
-                                 normaliser=normaliser,
-                                 verbose=True,
-                                 validation=False)
+    X, Y = common_preprocessing(data, imputer=imputer, normaliser=normaliser, validation=False, missing_threshold=missing_threshold, corr_threshold=correlation_threshold)
     log.info(f"{bars} Preprocessing complete {bars}")
+
     # Preprocess external validation data
     if external_test_data:
-        X_val, Y_val = get_preprocessed_data(data,
-                                             missing_threshold=missing_threshold,
-                                             correlation_threshold=correlation_threshold,
-                                             verbose=True, validation=True)
+        X_val, Y_val = common_preprocessing(data, imputer=imputer, normaliser=normaliser, validation=True)
         log.info(X_val.columns.difference(X.columns))
         # Get rid of extra columns introduced by values in validation dataset
         log.info(f'Dropping columns in val data since they are missing in train data: {X_val.columns.difference(X.columns)}')
         X_val = X_val.drop(set(X_val.columns.difference(X.columns)), axis=1)
         assert len(X.columns.difference(
-            X_val.columns)) == 0, f'Error: Train data includes columns {X.columns.difference(X_val.columns)} that are missing in val data'
+            X_val.columns)) == 0, (f'Error: Train data includes columns {X.columns.difference(X_val.columns)} that are '
+                                   f'missing in val data')
 
     all_metrics_list = all_classification_metrics_list
 
@@ -78,8 +61,8 @@ def evaluation(seed, out_dir, dataset, feature_set, external_test_data, imputer,
                            metric != 'confusion_matrix'}
 
     with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
-        f.write(f'\n========== New Trial at {time.strftime("%d.%m.%Y %H:%M:%S")} ==========\n')
-        # f.write(str(vars(args)))
+        f.write(f'\n {bars} New Trial at {time.strftime("%d.%m.%Y %H:%M:%S")} {bars} \n')
+        f.write(str(locals()))
         f.write('\n')
 
     for k, label_col in enumerate(Y.columns):
@@ -109,7 +92,7 @@ def evaluation(seed, out_dir, dataset, feature_set, external_test_data, imputer,
         all_model_metrics = {}
 
         # Feature selection for each endpoint only on training data
-        X_test, X_train = model_feature_selection(X_test, X_train, cores, y_train)
+        X_test, X_train = model_feature_selection(X_test, X_train, y_train, min_feature_fraction=0.5, cores=cores, scoring=make_scorer(average_precision_score))
 
         # model grid
         model_grid = get_classification_model_grid('balanced' if balancing_option == 'class_weight' else None, seed=seed)
@@ -124,33 +107,10 @@ def evaluation(seed, out_dir, dataset, feature_set, external_test_data, imputer,
                                                                       seed=seed)
             all_model_metrics[str(model.__class__.__name__)] = (val_metrics, test_metrics, curves)
 
-        # ===== Save aggregate plots across models =====
-        # Generate Boxplots for Metrics
-        json_metric_data = {}
-        for metric_name in all_model_metrics[str(model.__class__.__name__)][0].keys():
-            if metric_name == 'confusion_matrix':
-                json_metric_data[metric_name] = {
-                    model_name: ([cv_cm.tolist() for cv_cm in val_metrics[metric_name]], test_metrics[metric_name].tolist())
-                    for model_name, (val_metrics, test_metrics, _) in all_model_metrics.items()}
-                continue
-            metric_data = {model_name: (val_metrics[metric_name], test_metrics[metric_name])
-                           for model_name, (val_metrics, test_metrics, _) in all_model_metrics.items()}
-            json_metric_data[metric_name] = metric_data
-            boxplot(out_dir, metric_data, metric_name, label_col, ymin=(-1 if metric_name == 'mcc' else 0))
-        json.dump(json_metric_data, open(f'{out_dir}/{label_col}/all_model_metrics.json', 'w'), indent=4)
+        # Save summary plots across models
+        generate_summary_plots(all_model_metrics, label_col, model, out_dir, y)
 
-        # Plot roc pr for all models
-        plot_summary_roc(all_model_metrics, out_dir, label_col, dataset_partition='val', legend=True,
-                         value_in_legend=False)
-        plot_summary_roc(all_model_metrics, out_dir, label_col, dataset_partition='test', legend=True,
-                         value_in_legend=False)
-        plot_summary_prc(all_model_metrics, out_dir, label_col, y, dataset_partition='val', legend=True,
-                         value_in_legend=False)
-        plot_summary_prc(all_model_metrics, out_dir, label_col, y, dataset_partition='test', legend=True,
-                         value_in_legend=False)
-        plot_summary_roc_pr(all_model_metrics, out_dir, label_col, y)
-
-        # save results in DF
+        # Save summary results in dataframe
         for model_name, test_data in {model_name: entry[1] for model_name, entry in all_model_metrics.items()}.items():
             for metric, value in test_data.items():
                 if metric == 'confusion_matrix':
@@ -161,7 +121,72 @@ def evaluation(seed, out_dir, dataset, feature_set, external_test_data, imputer,
             df.to_csv(f'{out_dir}/data_frames/{metric}.csv')
 
 
-def model_feature_selection(X_test, X_train, cores, y_train, min_feature_fraction=0.5, scoring=make_scorer(average_precision_score)):
+def generate_summary_plots(all_model_metrics, label_col, model, out_dir, y):
+    # Generate Boxplots for Metrics
+    json_metric_data = {}
+    for metric_name in all_model_metrics[str(model.__class__.__name__)][0].keys():
+        if metric_name == 'confusion_matrix':
+            json_metric_data[metric_name] = {
+                model_name: ([cv_cm.tolist() for cv_cm in val_metrics[metric_name]], test_metrics[metric_name].tolist())
+                for model_name, (val_metrics, test_metrics, _) in all_model_metrics.items()}
+            continue
+        metric_data = {model_name: (val_metrics[metric_name], test_metrics[metric_name])
+                       for model_name, (val_metrics, test_metrics, _) in all_model_metrics.items()}
+        json_metric_data[metric_name] = metric_data
+        boxplot(out_dir, metric_data, metric_name, label_col, ymin=(-1 if metric_name == 'mcc' else 0))
+    json.dump(json_metric_data, open(f'{out_dir}/{label_col}/all_model_metrics.json', 'w'), indent=4)
+    # Plot roc pr for all models
+    plot_summary_roc(all_model_metrics, out_dir, label_col, dataset_partition='val', legend=True,
+                     value_in_legend=False)
+    plot_summary_roc(all_model_metrics, out_dir, label_col, dataset_partition='test', legend=True,
+                     value_in_legend=False)
+    plot_summary_prc(all_model_metrics, out_dir, label_col, y, dataset_partition='val', legend=True,
+                     value_in_legend=False)
+    plot_summary_prc(all_model_metrics, out_dir, label_col, y, dataset_partition='test', legend=True,
+                     value_in_legend=False)
+    plot_summary_roc_pr(all_model_metrics, out_dir, label_col, y)
+
+
+def setup_output_directory(dataset, feature_set, out_dir, seed):
+    # Setup output directory
+    seed = seed
+    np.random.seed(seed)
+    random.seed(seed)
+    now = str(datetime.now().strftime("%Y-%m-%d_T_%H-%M-%S"))
+    if out_dir is None:
+        # Set up an extra directory for this dataset
+        feature_set_string = '' if feature_set is None else f'_{"_".join(feature_set)}'
+        out_dir = f'results_{dataset}{feature_set_string}_{now}_seed_{seed}'
+    else:
+        # Output directory already exists, make subdirectory for this run
+        feature_set_string = '' if feature_set is None else f'_{"_".join(feature_set)}'
+        out_dir = f'{out_dir}/results_{dataset}{feature_set_string}_{now}_seed_{seed}'
+    log.info(f"Logging results to: {out_dir}")
+    os.makedirs(f'{out_dir}', exist_ok=True)
+    os.makedirs(f'{out_dir}/data_frames', exist_ok=True)
+    return out_dir, seed
+
+
+def model_feature_selection(X_test: pd.DataFrame,
+                            X_train: pd.DataFrame,
+                            y_train: pd.DataFrame,
+                            min_feature_fraction: float = 0.5,
+                            cores: int = -1,
+                            scoring: sklearn.metrics = make_scorer(average_precision_score)) -> pd.DataFrame:
+    """
+    Performs feature selection on the training data and applies the same selection to the test data.
+    Args:
+        X_test:
+        X_train:
+        cores:
+        y_train:
+        min_feature_fraction: Minimal fraction of features to keep
+        scoring: Which scoring function to use for feature selection
+
+    Returns:
+
+    """
+    log.debug(f"Columns before feature selection: {X_train.columns}")
     xgb_model = XGBClassifier()
     n_features = int(len(X_train.columns) * min_feature_fraction)
 

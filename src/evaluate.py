@@ -1,5 +1,5 @@
 import os
-
+import logging as log
 import matplotlib.pyplot as plt
 import numpy as np
 from imblearn.over_sampling import SMOTE, ADASYN, RandomOverSampler
@@ -24,16 +24,16 @@ def evaluate_single_model(model, param_grid,
 
     # ================= SETTING UP K-FOLD OR LOO CV =================
     if cv_splits > 0:
-        print(f'Evaluating model {model_name} with {cv_splits}-fold CV')
-        print(
+        log.info(f'Evaluating model {model_name} with {cv_splits}-fold CV')
+        log.info(
             f'Total split into Train/Val/Test: {round(100 * (cv_splits - 1) / cv_splits * len(y_train) / (len(y_train) + len(y_test)))}/' +
             f'{round(100 / cv_splits * len(y_train) / (len(y_train) + len(y_test)))}/{round(100 * len(y_test) / (len(y_train) + len(y_test)))}' +
             f' - Absolute Samples: {len(y_train) - round(len(y_train) / cv_splits)}/{round(len(y_train) / cv_splits)}/{len(y_test)}')
 
         cv = StratifiedKFold(n_splits=cv_splits, shuffle=True, random_state=seed)
     else:
-        print(f'Evaluating model {model_name} with LOO-CV')
-        print(
+        log.info(f'Evaluating model {model_name} with LOO-CV')
+        log.info(
             f'Total split into Train+Val/Test: {round(100 * len(y_train) / (len(y_train) + len(y_test)))}/' +
             f'{round(100 * len(y_test) / (len(y_train) + len(y_test)))}' +
             f' - Absolute Samples: {len(y_train) - 1}/1/{len(y_test)}')
@@ -47,8 +47,8 @@ def evaluate_single_model(model, param_grid,
 
     # ================= ADD BALANCING TO PIPELINE IF SELECTED =================
     if sample_balancing in ['random_oversampling', 'SMOTE', 'ADASYN']:
-        print(f'Performing random oversampling via {sample_balancing} algorithm.')
-        print(f'n samples before: {len(y_train[y_train == 0])} vs. {len(y_train[y_train == 1])}')
+        log.info(f'Performing random oversampling via {sample_balancing} algorithm.')
+        log.info(f'n samples before: {len(y_train[y_train == 0])} vs. {len(y_train[y_train == 1])}')
         if sample_balancing == 'random_oversampling':
             over_sampler = RandomOverSampler(random_state=seed)  # todo possibly reduce ratio to sth like 0.5
         elif sample_balancing == 'SMOTE':
@@ -56,7 +56,7 @@ def evaluate_single_model(model, param_grid,
         else:  # args.balancing_option == 'ADASYN'
             over_sampler = ADASYN(n_jobs=-1, random_state=seed)
 
-        # print(f'n samples after:  {len(endpoint[endpoint == 0])} vs. {len(endpoint[endpoint == 1])}')
+        # log.info(f'n samples after:  {len(endpoint[endpoint == 0])} vs. {len(endpoint[endpoint == 1])}')
         pipeline_steps.append(('over_sampling', over_sampler))
 
     # ================= SELECT OPTIMAL MODEL AND FEATURE SET THROUGH CV =================
@@ -73,7 +73,7 @@ def evaluate_single_model(model, param_grid,
         pipeline_steps.append(('model', model))
 
     pipeline = Pipeline(pipeline_steps)
-    print(f"Using pipeline {pipeline}")
+    log.info(f"Using pipeline {pipeline}")
 
     # Define metrics used
     all_metrics_list = all_classification_metrics_list
@@ -84,15 +84,15 @@ def evaluate_single_model(model, param_grid,
     grid_model = GridSearchCV(pipeline, param_grid=param_grid, scoring=cv_scoring, verbose=False, cv=cv, n_jobs=-1,
                               error_score=0)
     grid_model.fit(X_train, y_train)
-    print("Fitted model")
+    log.info("Fitted model")
     try:
         pass
     except ValueError as ve:
-        print(ve)
+        log.info(ve)
         with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
             f.write('\n' + model_name)
             f.write(f'GridSearch Failed due to incompatible options in best selected model.\n')
-        print("Warning: 'GridSearch Failed due to incompatible options in best selected model.")
+        log.info("Warning: 'GridSearch Failed due to incompatible options in best selected model.")
         empty_cm = np.zeros((2, 2))
         return {metric: ([0.0] if metric != 'confusion_matrix' else [empty_cm] * cv_splits) for metric in all_metrics_list}, \
             {metric: (0.0 if metric != 'confusion_matrix' else empty_cm) for metric in all_metrics_list}, \
@@ -100,7 +100,7 @@ def evaluate_single_model(model, param_grid,
     with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
         f.write('\n' + model_name)
         f.write(f'\nBest Params: {grid_model.best_params_}\n')
-    print(f'Best Params: {grid_model.best_params_} - {cv_scoring}: {grid_model.best_score_}')
+    log.info(f'Best Params: {grid_model.best_params_} - {cv_scoring}: {grid_model.best_score_}')
     best_model = grid_model.best_estimator_
 
     # ================= PERFORMING CV AGAIN WITH BEST MODEL FOR PLOTS AND RESULTS =================

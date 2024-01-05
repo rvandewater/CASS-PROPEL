@@ -12,6 +12,7 @@ import warnings
 dpi = 300
 colors = ['#001C7F', '#D62728', '#017517', '#8C0900', '#7600A1', '#B8860B', '#FF7F0E']
 
+style = 'seaborn-v0_8-colorblind'
 
 model_name_replacements = {
     'DecisionTreeClassifier': 'Decision tree',
@@ -110,7 +111,7 @@ def plot_summary_roc(all_model_metrics, out_dir, label_col, dataset_partition='v
         ds_index = 1
 
     plt.rcParams['font.family'] = "Arial"
-    plt.style.use('seaborn-notebook')
+    plt.style.use(style)
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.set_aspect('equal')
     if title:
@@ -164,7 +165,7 @@ def plot_summary_prc(all_model_metrics, out_dir, label_col, y, dataset_partition
         ds_index = 1
 
     plt.rcParams['font.family'] = "Arial"
-    plt.style.use('seaborn-notebook')
+    plt.style.use(style)
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.set_aspect('equal')
     if title:
@@ -392,7 +393,7 @@ def plot_calibration_curves(X_test, y_test, endpoint, model, model_name, out_dir
     sns.set(style='darkgrid', context='talk', palette='rainbow')
     fig, ax = plt.subplots()
     fig.suptitle(f'{model_name} predicting {endpoint}')
-    viz = CalibrationDisplay.from_estimator(model, X_test, y_test, n_bins=10, name=model_name, ax=ax)
+    CalibrationDisplay.from_estimator(model, X_test, y_test, n_bins=10, name=model_name, ax=ax)
     plt.tight_layout()
     plt.savefig(f'{out_dir}/{endpoint}/test/{model_name}_calibration'.replace(' ', '_'), dpi=dpi)
     plt.close()

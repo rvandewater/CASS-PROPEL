@@ -19,9 +19,6 @@ def get_parser():
                         help='Which imputer to use for missing values')
     parser.add_argument('--normaliser', '-n', choices=['standard', 'minmax'], nargs='?', const='standard', default="standard",
                         help='Which normaliser to use to scale numerical values')
-    parser.add_argument('--feature_selectors', '-fs', choices=['missing', 'single_unique', 'collinear'], nargs='*',
-                        default=['missing', 'single_unique', 'collinear'],
-                        help='Which feature selection functions to use. Do not specify for all, use flag without args for none.')
     parser.add_argument('--out_dir', '-o', type=str,
                         help='output directory')
     parser.add_argument('--no_features_dropped', '-nfd', action='store_false', dest='drop_features',
@@ -57,5 +54,9 @@ if __name__ == '__main__':
     logging.info('Starting evaluation...')
     arg_parser = get_parser()
     args = arg_parser.parse_args()
-    print(args)
+    # print(args)
+    log_format = "%(asctime)s - %(levelname)s - %(name)s : %(message)s"
+    date_format = "%Y-%m-%d %H:%M:%S"
+    logging.basicConfig(level=logging.INFO, format=log_format, datefmt=date_format)
+    # logging.getLogger().setLevel(logging.INFO)
     evaluation(**vars(args))
