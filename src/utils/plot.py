@@ -3,8 +3,8 @@ import seaborn as sns
 import shap
 from matplotlib import pyplot as plt
 from sklearn.calibration import CalibrationDisplay
-from sklearn.metrics import auc, precision_recall_curve, average_precision_score, plot_roc_curve, plot_precision_recall_curve, \
-    ConfusionMatrixDisplay, PrecisionRecallDisplay
+from sklearn.metrics import auc, precision_recall_curve, average_precision_score, roc_curve, \
+    ConfusionMatrixDisplay, PrecisionRecallDisplay, RocCurveDisplay
 from sweetviz import compare, analyze
 import os.path as pth
 import warnings
@@ -308,8 +308,7 @@ def plot_roc_pr_curve(X_test, y_test, endpoint, model, model_name, out_dir):
     ax2.set(xlim=[-0.05, 1.05], ylim=[0.0, 1.05])
     fig.suptitle(f'{model_name} predicting {endpoint}')
     # ROC
-    roc_plot = plot_roc_curve(model, X_test, y_test,
-                              name='ROC curve', lw=1, ax=ax1)
+    roc_plot = RocCurveDisplay.from_estimator(model, X_test, y_test, name='ROC curve', lw=1, ax=ax1)
     ax2.set(xlim=[-0.05, 1.05], ylim=[0.0, 1.05])
     prc_plot = PrecisionRecallDisplay.from_estimator(model, X_test, y_test,
                                                      name='PR curve', lw=1, ax=ax2)

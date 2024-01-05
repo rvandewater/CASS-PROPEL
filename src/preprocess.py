@@ -6,12 +6,12 @@ from sklearn.impute import IterativeImputer, KNNImputer, SimpleImputer
 
 from src.utils.feature_selector import FeatureSelector
 from src.data.abstract_dataset import Dataset
-
+import logging as log
 
 def get_preprocessed_data(data: Dataset,
-                          fs_operations=None,
-                          missing_threshold=0.5,
-                          correlation_threshold=0.95,
+                          # fs_operations=None,
+                          # missing_threshold=0.5,
+                          # correlation_threshold=0.95,
                           imputer="knn",
                           normaliser='standard',
                           verbose=False,
@@ -44,8 +44,8 @@ def get_preprocessed_data(data: Dataset,
     Y : DataFrame
         The endpoints
     """
-    if fs_operations is None:
-        fs_operations = [] #['missing', 'single_unique', 'collinear']
+    # if fs_operations is None:
+    #     fs_operations = [] #['missing', 'single_unique', 'collinear']
 
     # Choice of validation dataset
     if not validation:
@@ -59,17 +59,29 @@ def get_preprocessed_data(data: Dataset,
         X = pd.concat([X, X_or], ignore_index=True)
         Y = pd.concat([Y, Y_or], ignore_index=True)
 
+    print("Categorical features:")
+    print(data.get_categorical_features())
+    categorical_features = [col for col in X.columns if col in data.get_categorical_features()]
+    X[categorical_features] = X[categorical_features].fillna(value=0)
+    # if "Vorbehandlung" in X.columns:
+    #     X["Vorbehandlung"] = X["Vorbehandlung"].astype("int")
+    # if "Histologie" in X.columns:
+    #     X["Histologie"] = X["Histologie"].astype("int")
+
+    # One-hot-encode categorical features
+    X = pd.get_dummies(X, columns=categorical_features, dummy_na=False)
     # Apply FeatureSelector functionality
-    if len(fs_operations) > 0:
-        fs = FeatureSelector()
-        if 'single_unique' in fs_operations:
-            fs.identify_single_unique(X)
-        if 'missing' in fs_operations:
-            fs.identify_missing(X, missing_threshold=missing_threshold)
-        if 'collinear' in fs_operations:
-            fs.identify_collinear(X, correlation_threshold=correlation_threshold)
-            print(fs.removal_ops['collinear'])
-        X = fs.remove(X, fs_operations, one_hot=False)
+    # if len(fs_operations) > 0:
+    #     fs = FeatureSelector()
+    #     if 'single_unique' in fs_operations:
+    #         fs.identify_single_unique(X)
+    #     if 'missing' in fs_operations:
+    #         fs.identify_missing(X, missing_threshold=missing_threshold)
+    #     if 'collinear' in fs_operations:
+    #         fs.identify_collinear(X, correlation_threshold=correlation_threshold)
+    #         print(fs.removal_ops['collinear'])
+    #     X = fs.remove(X, fs_operations, one_hot=False)
+
 
     # Fix strings in Binary columns
     for binary_col in data.get_binary_features():
@@ -83,16 +95,6 @@ def get_preprocessed_data(data: Dataset,
                 X[binary_col].replace({unique_vals[0]: 0,
                                        unique_vals[1]: 1}, inplace=True)
 
-    print(data.get_categorical_features())
-    categorical_features = [col for col in X.columns if col in data.get_categorical_features()]
-    X[categorical_features] = X[categorical_features].fillna(value=0)
-    # if "Vorbehandlung" in X.columns:
-    #     X["Vorbehandlung"] = X["Vorbehandlung"].astype("int")
-    # if "Histologie" in X.columns:
-    #     X["Histologie"] = X["Histologie"].astype("int")
-
-    # One-hot-encode categorical features
-    X = pd.get_dummies(X, columns=categorical_features, dummy_na=False)
 
     X_numerical = X[[col for col in X.columns if col in data.get_numerical_features()]]
     X_binary = X.drop(columns=[col for col in X.columns if col in data.get_numerical_features()])
@@ -100,6 +102,7 @@ def get_preprocessed_data(data: Dataset,
     X_numerical_feature_names = X_numerical.columns
     # Interpolate numerical features
 
+    # todo: fix missing values appearing at evaluation
     if imputer is not None:
         print(f'Running {imputer} Imputer...')
         if imputer == 'iterative':
@@ -117,7 +120,7 @@ def get_preprocessed_data(data: Dataset,
 
     if normaliser is not None:
         # Normalise numerical features
-        print('Normalising numerical features...')
+        log.info('Normalising numerical features...')
         if normaliser == 'standard':
             scaler = StandardScaler()
         elif normaliser == 'minmax':

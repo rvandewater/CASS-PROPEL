@@ -1,4 +1,5 @@
 import argparse
+import logging
 
 from complete_evaluation import evaluation
 
@@ -12,11 +13,11 @@ def get_parser():
                         help='The dataset to process.')
     parser.add_argument('--feature_set', '-f', nargs='*', type=str, choices=['pre', 'intra', 'post', 'dyn'],
                         help='if given, processes only features from all provided feature sets')
-    parser.add_argument('--external_testset', '-e', action='store_true',
+    parser.add_argument('--external_test_data', '-e', action='store_true',
                         help='If specified, external validation dataset will be used as test data')
-    parser.add_argument('--imputer', '-i', choices=['iterative', 'knn', 'mean'], nargs='?', const='knn', default=None,
+    parser.add_argument('--imputer', '-i', choices=['iterative', 'knn', 'mean'], nargs='?', const='knn', default="knn",
                         help='Which imputer to use for missing values')
-    parser.add_argument('--normaliser', '-n', choices=['standard', 'minmax'], nargs='?', const='standard', default=None,
+    parser.add_argument('--normaliser', '-n', choices=['standard', 'minmax'], nargs='?', const='standard', default="standard",
                         help='Which normaliser to use to scale numerical values')
     parser.add_argument('--feature_selectors', '-fs', choices=['missing', 'single_unique', 'collinear'], nargs='*',
                         default=['missing', 'single_unique', 'collinear'],
@@ -46,12 +47,15 @@ def get_parser():
                         help='If true, an html file will be generated showing statistics of the parsed dataset')
     parser.add_argument('--seed', '-s', type=int, default=42,
                         help='If true, a seed will be set for reproducibility')
+    parser.add_argument('--cores', '-c', type=int, default=8,
+                        help='Number of cores to use for parallel processing')
 
     return parser
 
 
 if __name__ == '__main__':
+    logging.info('Starting evaluation...')
     arg_parser = get_parser()
     args = arg_parser.parse_args()
     print(args)
-    evaluation(args)
+    evaluation(**vars(args))

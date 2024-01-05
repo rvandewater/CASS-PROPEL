@@ -4,6 +4,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import LinearSVC, SVC
 from sklearn.tree import DecisionTreeClassifier
+from xgboost import XGBClassifier
 
 
 def get_classification_model_grid(class_weighting=None, seed=42):
@@ -24,23 +25,36 @@ def get_classification_model_grid(class_weighting=None, seed=42):
               'n_estimators': [100, 1000],
               'max_depth': [3, 5, 10],
               'max_features': ['sqrt', 'log2', None]}),
-            (LogisticRegression(solver='saga', max_iter=5000, class_weight=class_weighting, penalty='elasticnet', random_state=seed),
+            (LogisticRegression(solver='saga', max_iter=5000, class_weight=class_weighting, penalty='elasticnet',
+                                random_state=seed),
              {'l1_ratio': [0.0, 0.25, 0.5, 0.75, 1.0],
               'C': [0.1, 0.5, 1.0, 5.0]}),
-            (SVC(class_weight=class_weighting, probability=True, random_state=seed),
-             {'C': [0.1, 0.5, 1.0, 10.0, 100.0],
-              'kernel': ['rbf', 'poly', 'sigmoid', 'linear']}),
-            (LinearSVC(max_iter=10000, class_weight=class_weighting, random_state=seed),
-             {'penalty': ['l1', 'l2'],
-              'dual': [False, True],
-              'loss': ['hinge', 'squared_hinge'],
-              'C': [0.1, 0.5, 1.0, 10.0, 100.0]}),
-            (MLPClassifier(max_iter=500, solver='sgd', random_state=seed),
-             {'hidden_layer_sizes': [(128, 64), (64, 32), (32, 16), (32, 32), (64,), (32,), (16,)],
-              'activation': ['relu', 'logistic', 'identity'],
-              'momentum': [0.0, 0.9],
-              'batch_size': [8, 32, 'auto'],
-              'learning_rate_init': [0.1, 0.05, 0.01, 0.005, 0.001]})
+            # (XGBClassifier(random_state=seed),
+            #  {'loss': ['log_loss', 'exponential'],
+            #   'learning_rate': [0.01, 0.1, 0.3],
+            #   'n_estimators': [100, 1000],
+            #   'max_depth': [3, 5, 10],
+            #   'max_features': ['sqrt', 'log2', None]}),
+            # (SVC(class_weight=class_weighting, probability=True, random_state=seed),
+            #  {'C': [0.1, 0.5, 1.0, 10.0, 100.0],
+            #   'kernel': ['rbf', 'poly', 'sigmoid', 'linear']}),
+            # (LinearSVC(max_iter=10000, class_weight=class_weighting, random_state=seed),
+            #  {'penalty': ['l1', 'l2'],
+            #   'dual': [False, True],
+            #   'loss': ['hinge', 'squared_hinge'],
+            #   'C': [0.1, 0.5, 1.0, 10.0, 100.0],})
+            # (MLPClassifier(max_iter=500, solver='sgd', random_state=seed),
+            #  {'hidden_layer_sizes': [(128, 64), (64, 32), (32, 16), (32, 32), (64,), (32,), (16,)],
+            #   'activation': ['relu', 'logistic', 'identity'],
+            #   'momentum': [0.0, 0.9],
+            #   'batch_size': [8, 32, 'auto'],
+            #   'learning_rate_init': [0.1, 0.05, 0.01, 0.005, 0.001]})
+            # (XGBClassifier(random_state=seed),
+            #  {'loss': ['log_loss', 'exponential'],
+            #   'learning_rate': [0.01, 0.1, 0.3],
+            #   'n_estimators': [100, 1000],
+            #   'max_depth': [3, 5, 10],
+            #   'max_features': ['sqrt', 'log2', None]}),
             ]
 
 

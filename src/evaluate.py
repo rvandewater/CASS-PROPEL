@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from imblearn.over_sampling import SMOTE, ADASYN, RandomOverSampler
 from sklearn.feature_selection import SelectFromModel, SelectKBest
-from sklearn.metrics import ConfusionMatrixDisplay, auc, plot_precision_recall_curve, plot_roc_curve
+from sklearn.metrics import ConfusionMatrixDisplay, auc, PrecisionRecallDisplay, RocCurveDisplay
 from sklearn.model_selection import GridSearchCV, LeaveOneOut, StratifiedKFold
 from imblearn.pipeline import Pipeline
 from sklearn.svm import LinearSVC
@@ -17,6 +17,7 @@ def evaluate_single_model(model, param_grid,
                           X_train, y_train, X_test, y_test,
                           cv_splits=8, cv_scoring='average_precision', select_features=True, shap_value_eval=False,
                           cm_agg_type='sum', out_dir='results/default', sample_balancing=None, seed=42):
+
     os.makedirs(f'{out_dir}/{y_train.name.replace(" ", "_")}/val/', exist_ok=True)
     os.makedirs(f'{out_dir}/{y_train.name.replace(" ", "_")}/test/', exist_ok=True)
     model_name = str(model.__class__.__name__)
@@ -41,6 +42,8 @@ def evaluate_single_model(model, param_grid,
 
     # Define list with steps for the pipeline
     pipeline_steps = []
+
+
 
     # ================= ADD BALANCING TO PIPELINE IF SELECTED =================
     if sample_balancing in ['random_oversampling', 'SMOTE', 'ADASYN']:
@@ -78,7 +81,8 @@ def evaluate_single_model(model, param_grid,
     # Default CV scoring
     if cv_scoring is None:
         cv_scoring = "average_precision"
-    grid_model = GridSearchCV(pipeline, param_grid=param_grid, scoring=cv_scoring, verbose=False, cv=cv, n_jobs=-1, error_score=0)
+    grid_model = GridSearchCV(pipeline, param_grid=param_grid, scoring=cv_scoring, verbose=False, cv=cv, n_jobs=-1,
+                              error_score=0)
     grid_model.fit(X_train, y_train)
     print("Fitted model")
     try:
@@ -91,8 +95,8 @@ def evaluate_single_model(model, param_grid,
         print("Warning: 'GridSearch Failed due to incompatible options in best selected model.")
         empty_cm = np.zeros((2, 2))
         return {metric: ([0.0] if metric != 'confusion_matrix' else [empty_cm] * cv_splits) for metric in all_metrics_list}, \
-               {metric: (0.0 if metric != 'confusion_matrix' else empty_cm) for metric in all_metrics_list}, \
-               (([0] * 101, [0] * 101, [0] * 101), ([0] * 101, [0] * 101, [0] * 101))
+            {metric: (0.0 if metric != 'confusion_matrix' else empty_cm) for metric in all_metrics_list}, \
+            (([0] * 101, [0] * 101, [0] * 101), ([0] * 101, [0] * 101, [0] * 101))
     with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
         f.write('\n' + model_name)
         f.write(f'\nBest Params: {grid_model.best_params_}\n')
@@ -133,18 +137,18 @@ def evaluate_single_model(model, param_grid,
             ys_proba.append(best_model.predict_proba(cv_X_val)[:, 1])
 
         # save ROC values
-        viz = plot_roc_curve(best_model, cv_X_val, cv_y_val,
-                             name='ROC fold {}'.format(i),
-                             alpha=0.3, lw=1, ax=ax1)
+        viz = RocCurveDisplay.from_estimator(best_model, cv_X_val, cv_y_val,
+                                             name='ROC fold {}'.format(i),
+                                             alpha=0.3, lw=1, ax=ax1)
         interp_tpr = np.interp(x_linspace, viz.fpr, viz.tpr, left=0.0)
         tprs.append(interp_tpr)
 
         model_metrics['roc_auc'] = viz.roc_auc
 
         # save Precision_Recall values
-        viz2 = plot_precision_recall_curve(best_model, cv_X_val, cv_y_val,
-                                           name='PRC fold {}'.format(i),
-                                           alpha=0.3, lw=1, ax=ax2)
+        viz2 = PrecisionRecallDisplay.from_estimator(best_model, cv_X_val, cv_y_val,
+                                                     name='PRC fold {}'.format(i),
+                                                     alpha=0.3, lw=1, ax=ax2)
 
         model_metrics['avg_precision'] = viz2.average_precision
         aucprs = auc(viz2.recall, viz2.precision)

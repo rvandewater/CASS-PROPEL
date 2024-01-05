@@ -9,7 +9,7 @@
 #SBATCH --time 48:00:00
 
 eval "$(/opt/conda/bin/conda shell.bash hook)" # Conda initialization in the bash shell
-conda activate cass_propel_new
+conda activate propel
 
 
 echo "This is a SLURM job named" $SLURM_JOB_NAME "with array id" $SLURM_ARRAY_TASK_ID "and job id" $SLURM_JOB_ID
@@ -17,7 +17,7 @@ echo "Resources allocated: " $SLURM_CPUS_PER_TASK "CPUs, " $SLURM_MEM_PER_NODE "
 echo $1
 
 
-python3 complete_evaluation.py cass_preop_emerg --seed $1 --out_dir=cass_preop_emergency
+python3 main.py cass_preop_emerg --seed $1 --cores=$SLURM_CPUS_PER_TASK --out_dir=cass_preop_emergency
 
 #python3 complete_evaluation.py cass_preop_elect --seed $1 --out_dir=cass_preop_elect
 
