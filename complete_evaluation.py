@@ -1,27 +1,21 @@
-import argparse
 import os
 import json
 import time
 import random
-from array import array
 from datetime import datetime
 
-import sklearn.metrics
-import wandb
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 
 from src.data import get_data_from_name
-from src.preprocess import common_preprocessing
+from src.preprocess import common_preprocessing, model_feature_selection
 from src.models import get_classification_model_grid
 from src.evaluate import evaluate_single_model
 from src.utils.metrics import all_classification_metrics_list
 from src.utils.plot import boxplot, plot_summary_roc_pr, plot_summary_roc, plot_summary_prc
-from sklearn.metrics import average_precision_score, roc_auc_score, make_scorer
+from sklearn.metrics import average_precision_score, make_scorer
 import logging as log
-from sklearn.feature_selection import RFECV
-from xgboost import XGBClassifier
 
 # import feature_engine
 bars = '====================='
@@ -30,7 +24,30 @@ bars = '====================='
 def evaluation(seed, out_dir, dataset, feature_set, external_test_data, imputer, normaliser, drop_features,
                select_features, cv_splits, shap_eval, test_fraction, balancing_option, drop_missing_value, data_exploration,
                missing_threshold, correlation_threshold, cores):
+    """
+    Main function for evaluation of classical ML models on post-operative complications dataset.
 
+    Args:
+        seed:
+        out_dir:
+        dataset:
+        feature_set:
+        external_test_data:
+        imputer:
+        normaliser:
+        drop_features:
+        select_features:
+        cv_splits:
+        shap_eval:
+        test_fraction:
+        balancing_option:
+        drop_missing_value:
+        data_exploration:
+        missing_threshold:
+        correlation_threshold:
+        cores:
+    """
+    cores = 1
     out_dir, seed = setup_output_directory(dataset, feature_set, out_dir, seed)
 
     # Get DataInformation object for the specified task
@@ -41,7 +58,8 @@ def evaluation(seed, out_dir, dataset, feature_set, external_test_data, imputer,
                out_dir=out_dir, exploration=data_exploration, external_validation=external_test_data)
 
     # Preprocess data
-    X, Y = common_preprocessing(data, imputer=imputer, normaliser=normaliser, validation=False, missing_threshold=missing_threshold, corr_threshold=correlation_threshold)
+    X, Y = common_preprocessing(data, imputer=imputer, normaliser=normaliser, validation=False,
+                                missing_threshold=missing_threshold, corr_threshold=correlation_threshold)
     log.info(f"{bars} Preprocessing complete {bars}")
 
     # Preprocess external validation data
@@ -92,7 +110,8 @@ def evaluation(seed, out_dir, dataset, feature_set, external_test_data, imputer,
         all_model_metrics = {}
 
         # Feature selection for each endpoint only on training data
-        X_test, X_train = model_feature_selection(X_test, X_train, y_train, min_feature_fraction=0.5, cores=cores, scoring=make_scorer(average_precision_score))
+        # X_test, X_train = model_feature_selection(X_test, X_train, y_train, min_feature_fraction=0.5, cores=cores,
+        #                                           scoring=make_scorer(average_precision_score))
 
         # model grid
         model_grid = get_classification_model_grid('balanced' if balancing_option == 'class_weight' else None, seed=seed)
@@ -107,18 +126,18 @@ def evaluation(seed, out_dir, dataset, feature_set, external_test_data, imputer,
                                                                       seed=seed)
             all_model_metrics[str(model.__class__.__name__)] = (val_metrics, test_metrics, curves)
 
-        # Save summary plots across models
-        generate_summary_plots(all_model_metrics, label_col, model, out_dir, y)
+        if(len(model_grid) > 1):
+            # Save summary plots across models
+            generate_summary_plots(all_model_metrics, label_col, model, out_dir, y)
 
-        # Save summary results in dataframe
-        for model_name, test_data in {model_name: entry[1] for model_name, entry in all_model_metrics.items()}.items():
-            for metric, value in test_data.items():
-                if metric == 'confusion_matrix':
-                    continue
-                all_test_metric_dfs[metric].loc[model_name, label_col.replace(' ', '_')] = value
-
-        for metric, df in all_test_metric_dfs.items():
-            df.to_csv(f'{out_dir}/data_frames/{metric}.csv')
+            # Save summary results in dataframe
+            for model_name, test_data in {model_name: entry[1] for model_name, entry in all_model_metrics.items()}.items():
+                for metric, value in test_data.items():
+                    if metric == 'confusion_matrix':
+                        continue
+                    all_test_metric_dfs[metric].loc[model_name, label_col.replace(' ', '_')] = value
+            for metric, df in all_test_metric_dfs.items():
+                df.to_csv(f'{out_dir}/data_frames/{metric}.csv')
 
 
 def generate_summary_plots(all_model_metrics, label_col, model, out_dir, y):
@@ -167,36 +186,3 @@ def setup_output_directory(dataset, feature_set, out_dir, seed):
     return out_dir, seed
 
 
-def model_feature_selection(X_test: pd.DataFrame,
-                            X_train: pd.DataFrame,
-                            y_train: pd.DataFrame,
-                            min_feature_fraction: float = 0.5,
-                            cores: int = -1,
-                            scoring: sklearn.metrics = make_scorer(average_precision_score)) -> pd.DataFrame:
-    """
-    Performs feature selection on the training data and applies the same selection to the test data.
-    Args:
-        X_test:
-        X_train:
-        cores:
-        y_train:
-        min_feature_fraction: Minimal fraction of features to keep
-        scoring: Which scoring function to use for feature selection
-
-    Returns:
-
-    """
-    log.debug(f"Columns before feature selection: {X_train.columns}")
-    xgb_model = XGBClassifier()
-    n_features = int(len(X_train.columns) * min_feature_fraction)
-
-    # Cross validated feature selection
-    select = RFECV(estimator=xgb_model, min_features_to_select=n_features, verbose=0, cv=5, scoring=scoring, n_jobs=cores)
-    select = select.fit(X_train, y_train)
-
-    # Get the selection mask
-    mask = select.get_support()
-    X_train = X_train.loc[:, mask]  # select.transform(X_train)
-    X_test = X_test.loc[:, mask]
-    log.info(f"Columns after feature selection: {X_train.columns}")
-    return X_test, X_train
