@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn import tree
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import f1_score, auc
 import logging as log
 from src.models import get_feature_importance, positive_class_probability
@@ -12,8 +13,16 @@ from src.utils.plot import plot_coefficients, plot_roc_pr_curve, plot_confusion_
 
 def test_classification_model(model, X_train, y_train, X_test, y_test, model_name, select_features, out_dir):
 
+    log.info("Calibrating model")
     # Re-fit complete training set
-    model.fit(X_train, y_train)
+    # model.fit(X_train, y_train)
+    # TODO: improve calibration
+    # We use prefit as we want to fit on the entire training set
+    calibration = CalibratedClassifierCV(model, method='isotonic', cv="prefit", n_jobs=1)
+    model = calibration.fit(X_train, y_train)
+
+    # Re-fit complete training set
+    # model.fit(X_train, y_train)
 
     # Determine optimal classification threshold
     def to_labels(pos_probs, threshold):
@@ -40,11 +49,17 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
 
     # ===== Confusion Matrix ====
     plot_confusion_matrix(y_train.name, test_metrics['confusion_matrix'], model_name, out_dir, "test")
-
-    # ===== Feature Importances =====
-    feature_importances = get_feature_importance(model)
+    log.info(model)
+    # estimator = model.estimator.named_steps['model']
+    # selector = model.estimator.named_steps['selector']
+    estimator = model.calibrated_classifiers_[0].estimator.named_steps['model']
     if select_features:
-        feature_names = X_train.columns[model.named_steps['selector'].get_support()]
+        selector = model.calibrated_classifiers_[0].estimator.named_steps['selector']
+    # ===== Feature Importances =====
+    feature_importances = get_feature_importance(estimator)
+
+    if select_features:
+        feature_names = X_train.columns[selector.get_support()]
         with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
             f.write(f'selected features: {feature_names}\n')
         log.info(f'Selected features: {feature_names}')
@@ -58,8 +73,8 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
 
     #===== Decision Tree =====
     if model_name == 'DecisionTreeClassifier':
-        # plt.figure(figsize=(12, 12))
-        tree.plot_tree(model.named_steps['model'], feature_names=feature_names, filled=True, rounded=True, fontsize=10)
+        plt.figure(figsize=(50, 50))
+        tree.plot_tree(estimator, feature_names=feature_names, filled=True, rounded=True, fontsize=10)
         plt.savefig(f'{out_dir}/{y_train.name.replace(" ", "_")}/test/{model_name}_tree.pdf'.replace(' ', '_'), bbox_inches='tight')
     # ===== Calibration Curves =====
     if not (model_name == 'LinearSVC'):
