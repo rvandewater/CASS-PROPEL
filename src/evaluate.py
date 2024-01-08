@@ -4,13 +4,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 from imblearn.over_sampling import SMOTE, ADASYN, RandomOverSampler
 from sklearn.feature_selection import SelectFromModel, SelectKBest
-from sklearn.metrics import ConfusionMatrixDisplay, auc, PrecisionRecallDisplay, RocCurveDisplay
-from sklearn.model_selection import GridSearchCV, LeaveOneOut, StratifiedKFold
+from sklearn.metrics import ConfusionMatrixDisplay, auc, PrecisionRecallDisplay, RocCurveDisplay, make_scorer, \
+    average_precision_score
+from sklearn.model_selection import GridSearchCV, LeaveOneOut, StratifiedKFold, RandomizedSearchCV
 from imblearn.pipeline import Pipeline
-from sklearn.svm import LinearSVC
+from xgboost import XGBClassifier
+from src.preprocess import model_feature_selection
 from src.test import test_classification_model
 from src.utils.metrics import all_classification_metrics_list, compute_classification_metrics
 from src.utils.plot import plot_val_mean_prec_rec, plot_val_mean_roc, plot_confusion_matrix, plot_shap_values
+
 
 
 def evaluate_single_model(model, param_grid,
@@ -43,8 +46,6 @@ def evaluate_single_model(model, param_grid,
     # Define list with steps for the pipeline
     pipeline_steps = []
 
-
-
     # ================= ADD BALANCING TO PIPELINE IF SELECTED =================
     if sample_balancing in ['random_oversampling', 'SMOTE', 'ADASYN']:
         log.info(f'Performing random oversampling via {sample_balancing} algorithm.')
@@ -63,10 +64,14 @@ def evaluate_single_model(model, param_grid,
 
     # prepare param_grid
     param_grid = {'model__' + key: value for (key, value) in param_grid.items()}
-
+    select_features = False
     if select_features:
-        param_grid['selector'] = [SelectKBest(k='all'), SelectKBest(k=25),
-                                  SelectFromModel(LinearSVC(C=1, penalty="l1", dual=False, max_iter=5000))]
+        # Feature selection for each endpoint only on training data
+        param_grid['selector'] = [model_feature_selection(X_test, X_train, y_train, min_feature_fraction=0.5, cores=1,
+                                                  scoring=make_scorer(average_precision_score))]
+        param_grid['selector'] = [SelectFromModel(XGBClassifier())]
+        # param_grid['selector'] = [SelectKBest(k='all'), SelectKBest(k=25),
+        #                           SelectFromModel(LinearSVC(C=1, penalty="l1", dual=False, max_iter=5000))]
 
         pipeline_steps.extend([('selector', 'passthrough'), ('model', model)])
     else:
@@ -81,10 +86,12 @@ def evaluate_single_model(model, param_grid,
     # Default CV scoring
     if cv_scoring is None:
         cv_scoring = "average_precision"
-    grid_model = GridSearchCV(pipeline, param_grid=param_grid, scoring=cv_scoring, verbose=False, cv=cv, n_jobs=-1,
-                              error_score=0)
+
+    grid_model = RandomizedSearchCV(pipeline, param_distributions=param_grid, scoring=cv_scoring, verbose=False, cv=cv, n_jobs=-1,
+                              error_score=0, n_iter=20)
     grid_model.fit(X_train, y_train)
     log.info("Fitted model")
+
     try:
         pass
     except ValueError as ve:
@@ -92,7 +99,7 @@ def evaluate_single_model(model, param_grid,
         with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
             f.write('\n' + model_name)
             f.write(f'GridSearch Failed due to incompatible options in best selected model.\n')
-        log.info("Warning: 'GridSearch Failed due to incompatible options in best selected model.")
+        log.warning("GridSearch Failed due to incompatible options in best selected model.")
         empty_cm = np.zeros((2, 2))
         return {metric: ([0.0] if metric != 'confusion_matrix' else [empty_cm] * cv_splits) for metric in all_metrics_list}, \
             {metric: (0.0 if metric != 'confusion_matrix' else empty_cm) for metric in all_metrics_list}, \
@@ -116,6 +123,7 @@ def evaluate_single_model(model, param_grid,
     cv_metrics = {metric: [] for metric in all_metrics_list}
     ys_real = []
     ys_proba = []
+
     # Perform k-fold cross validation
     for i, (train, val) in enumerate(cv.split(X_train, y_train)):
         cv_X_train = X_train.iloc[train]
@@ -123,8 +131,9 @@ def evaluate_single_model(model, param_grid,
         cv_X_val = X_train.iloc[val]
         cv_y_val = y_train.iloc[val]
 
-        best_model.fit(cv_X_train, cv_y_train)
         # Save performance values
+        best_model.fit(cv_X_train, cv_y_train)
+
         y_pred = best_model.predict(cv_X_val)
 
         model_metrics = compute_classification_metrics(cv_y_val, y_pred)
@@ -187,7 +196,6 @@ def evaluate_single_model(model, param_grid,
               xticks_rotation='horizontal', values_format='d')
     plt.savefig(f'{out_dir}/{y_train.name}/val/{model_name}_cm'.replace(' ', '_'))
     plt.close()
-
     # =================== Final Model Testing ===============
     test_metrics, test_curves = test_classification_model(best_model, X_train, y_train, X_test, y_test,
                                                           model_name, select_features, out_dir)
