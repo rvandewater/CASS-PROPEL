@@ -1,8 +1,12 @@
 import pandas as pd
 import numpy as np
+import sklearn.metrics
+from sklearn.feature_selection import RFECV
+from sklearn.metrics import make_scorer, average_precision_score
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.impute import KNNImputer, SimpleImputer
 from sklearn.experimental import enable_iterative_imputer
+from xgboost import XGBClassifier
 
 # from src.utils.feature_selector import FeatureSelector
 from src.data.abstract_dataset import Dataset
@@ -42,8 +46,8 @@ def common_preprocessing(data: Dataset,
 
     X.dropna(thresh = len(X)*missing_threshold, axis = 1, inplace = True)
 
-    log.info("Categorical features:")
-    log.info(data.get_categorical_features())
+    log.debug("Categorical features:")
+    log.debug(data.get_categorical_features())
     categorical_features = [col for col in X.columns if col in data.get_categorical_features()]
     X[categorical_features] = X[categorical_features].fillna(value=0)
     # if "Vorbehandlung" in X.columns:
@@ -76,7 +80,7 @@ def common_preprocessing(data: Dataset,
             if len(unique_vals) < 2:
                 raise AssertionError(f"Binary column {binary_col} has less than 2 unique values.")
             if len(unique_vals) != 1 and unique_vals != [0, 1]:
-                log.warning(f'Renaming entries from {binary_col}: {unique_vals[0]} -> 0; {unique_vals[1]} -> 1')
+                log.debug(f'Renaming entries from {binary_col}: {unique_vals[0]} -> 0; {unique_vals[1]} -> 1')
                 X[binary_col].replace({unique_vals[0]: 0,
                                        unique_vals[1]: 1}, inplace=True)
 
@@ -86,7 +90,7 @@ def common_preprocessing(data: Dataset,
 
     # Interpolate numerical features
     if imputer is not None:
-        log.info(f'Running {imputer} Imputer...')
+        log.info(f'Running {imputer} imputer...')
         # Unstable, so pro
         # if imputer == 'iterative':
         #     imputer = IterativeImputer(max_iter=1000)
@@ -128,7 +132,8 @@ def common_preprocessing(data: Dataset,
     for y_col in Y:
         log.info(f'Endpoint {y_col}:')
         if y_col in data.get_numerical_endpoints():
-            log.info(Y[y_col].describe())
+            log.debug("Endpoints:")
+            log.debug(Y[y_col].describe())
         else:
             abs_value_counts = Y[y_col].value_counts()
             rel_value_counts = Y[y_col].value_counts(normalize=True)
@@ -145,3 +150,39 @@ def drop_correlated(df_in, threshold):
     df_out = df_in[un_corr_idx]
     log.info(f'Dropped {len(df_in.columns) - len(df_out.columns)} columns due to high correlation')
     return df_out
+
+
+def model_feature_selection(X_test: pd.DataFrame,
+                            X_train: pd.DataFrame,
+                            y_train: pd.DataFrame,
+                            min_feature_fraction: float = 0.5,
+                            cores: int = -1,
+                            scoring: sklearn.metrics = make_scorer(average_precision_score)) -> pd.DataFrame:
+    """
+    Performs feature selection on the training data and applies the same selection to the test data.
+    Args:
+        X_test:
+        X_train:
+        cores:
+        y_train:
+        min_feature_fraction: Minimal fraction of features to keep
+        scoring: Which scoring function to use for feature selection
+
+    Returns:
+
+    """
+    log.debug(f"Columns before feature selection: {X_train.columns}")
+    xgb_model = XGBClassifier()
+    n_features = int(len(X_train.columns) * min_feature_fraction)
+
+    # Cross validated feature selection
+    select = RFECV(estimator=xgb_model, min_features_to_select=n_features, verbose=0, cv=5, scoring=scoring, n_jobs=cores)
+    return select
+    # select = select.fit(X_train, y_train)
+    #
+    # # Get the selection mask
+    # mask = select.get_support()
+    # X_train = X_train.loc[:, mask]  # select.transform(X_train)
+    # X_test = X_test.loc[:, mask]
+    # log.info(f"Columns after feature selection: {X_train.columns}")
+    # return X_test, X_train
