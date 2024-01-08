@@ -68,7 +68,7 @@ def boxplot(out_dir, data, metric_name, y_label, ymin=0, ymax=1):
     ax.set_ylim(ymin, ymax)
     ax.set_ylabel(metric_name)
     plt.tight_layout()
-    plt.savefig(f'{out_dir}/{y_label.replace(" ", "_")}/all_models_{metric_name}', dpi=dpi, format=output_format)
+    plt.savefig(f'{out_dir}/{y_label.replace(" ", "_")}/all_models_{metric_name}.{output_format}', dpi=dpi, format=output_format)
     plt.close()
 
 
@@ -199,7 +199,7 @@ def plot_summary_prc(all_model_metrics, out_dir, label_col, y, dataset_partition
     ax.tick_params(axis='both', which='minor', labelsize=12)
     if legend:
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15))
-    plt.savefig(f'{out_dir}/{label_col}/all_models_{dataset_partition}_prc_curves'.replace(' ', '_'),
+    plt.savefig(f'{out_dir}/{label_col}/all_models_{dataset_partition}_prc_curves.{output_format}'.replace(' ', '_'),
                 bbox_inches='tight', dpi=dpi, format=output_format)
     plt.close()
 
@@ -242,7 +242,7 @@ def plot_summary_roc_pr(all_model_metrics, out_dir, label_col, y):
     ax2.set(xlim=[-0.05, 1.05], ylim=[0.0, 1.05],
             title='Precision-Recall')
     ax2.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15))
-    plt.savefig(f'{out_dir}/{label_col}/all_models_roc_prc_curves'.replace(' ', '_'),
+    plt.savefig(f'{out_dir}/{label_col}/all_models_roc_prc_curves.{output_format}'.replace(' ', '_'),
                 bbox_inches='tight', dpi=dpi, format=output_format)
     plt.close()
 
@@ -319,7 +319,7 @@ def plot_roc_pr_curve(X_test, y_test, endpoint, model, model_name, out_dir):
     ax2.set(xlim=[-0.05, 1.05], ylim=[0.0, 1.05])
     prc_plot = PrecisionRecallDisplay.from_estimator(model, X_test, y_test,
                                                      name='PR curve', lw=1, ax=ax2)
-    plt.savefig(f'{out_dir}/{endpoint}/test/{model_name}_roc_prc_curves'.replace(' ', '_'), bbox_inches='tight', dpi=dpi, format=output_format)
+    plt.savefig(f'{out_dir}/{endpoint}/test/{model_name}_roc_prc_curves.{output_format}'.replace(' ', '_'), bbox_inches='tight', dpi=dpi, format=output_format)
 
     return roc_plot, prc_plot
 
@@ -331,7 +331,7 @@ def plot_confusion_matrix(label, confusion_matrix, model_name, out_dir, phase):
                                   display_labels=[0, 1])
     disp.plot(include_values=True, cmap='Blues', ax=ax,
               xticks_rotation='horizontal', values_format='d')
-    plt.savefig(f'{out_dir}/{label}/{phase}/{model_name}_cm'.replace(' ', '_'), format=output_format)
+    plt.savefig(f'{out_dir}/{label}/{phase}/{model_name}_cm.{output_format}'.replace(' ', '_'), format=output_format)
     plt.close()
 
 
@@ -361,12 +361,12 @@ def plot_shap_values(X_test, X_train, y_train, cv, model, model_name, out_dir, s
         test_shap_values = get_shap_values(X_test, X_train)
         shap.summary_plot(test_shap_values, X_test, show=False)
         plt.tight_layout()
-        plt.savefig(f'{out_dir}/{y_train.name}/test/{model_name}_SHAP.png'.replace(' ', '_'), dpi=dpi, format=output_format)
+        plt.savefig(f'{out_dir}/{y_train.name}/test/{model_name}_SHAP.{output_format}'.replace(' ', '_'), dpi=dpi, format=output_format)
         plt.close()
 
         shap.summary_plot(test_shap_values, X_test, plot_type='bar', show=False)
         plt.tight_layout()
-        plt.savefig(f'{out_dir}/{y_train.name}/test/{model_name}_SHAP_bars.png'.replace(' ', '_'), dpi=dpi, format=output_format)
+        plt.savefig(f'{out_dir}/{y_train.name}/test/{model_name}_SHAP_bars.{output_format}'.replace(' ', '_'), dpi=dpi, format=output_format)
         plt.close()
 
         # CV SHAP values
@@ -386,12 +386,12 @@ def plot_shap_values(X_test, X_train, y_train, cv, model, model_name, out_dir, s
         new_index = [ix for ix_test_fold in test_ixs for ix in ix_test_fold]
         shap.summary_plot(np.array(shap_values_list), X_train.reindex(new_index), show=False)
         plt.tight_layout()
-        plt.savefig(f'{out_dir}/{y_train.name}/val/{model_name}_SHAP.png'.replace(' ', '_'), dpi=dpi, format=output_format)
+        plt.savefig(f'{out_dir}/{y_train.name}/val/{model_name}_SHAP.{output_format}'.replace(' ', '_'), dpi=dpi, format=output_format)
         plt.close()
 
         shap.summary_plot(np.array(shap_values_list), X_train.reindex(new_index), plot_type='bar', show=False)
         plt.tight_layout()
-        plt.savefig(f'{out_dir}/{y_train.name}/val/{model_name}_SHAP_bars.png'.replace(' ', '_'), dpi=dpi, format=output_format)
+        plt.savefig(f'{out_dir}/{y_train.name}/val/{model_name}_SHAP_bars.{output_format}'.replace(' ', '_'), dpi=dpi, format=output_format)
         plt.close()
 
 
@@ -401,6 +401,6 @@ def plot_calibration_curves(X_test, y_test, endpoint, model, model_name, out_dir
     fig.suptitle(f'{model_name} predicting {endpoint}')
     CalibrationDisplay.from_estimator(model, X_test, y_test, n_bins=10, name=model_name, ax=ax)
     plt.tight_layout()
-    plt.savefig(f'{out_dir}/{endpoint}/test/{model_name}_calibration'.replace(' ', '_'), dpi=dpi, format=output_format)
+    plt.savefig(f'{out_dir}/{endpoint}/test/{model_name}_calibration.{output_format}'.replace(' ', '_'), dpi=dpi, format=output_format)
     plt.close()
     sns.reset_orig()

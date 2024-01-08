@@ -51,12 +51,14 @@ def get_parser():
 
 
 if __name__ == '__main__':
+    log_format = "%(asctime)s - %(levelname)s - %(name)s : %(message)s"
+    date_format = "%Y-%m-%d %H:%M:%S"
+    # logger = logging.getLogger()
+    # logger.setLevel(logging.INFO)
+    logging.basicConfig(level=logging.INFO, format=log_format, datefmt=date_format, force=True)
     logging.info('Starting evaluation...')
     arg_parser = get_parser()
     args = arg_parser.parse_args()
     # print(args)
-    log_format = "%(asctime)s - %(levelname)s - %(name)s : %(message)s"
-    date_format = "%Y-%m-%d %H:%M:%S"
-    logging.basicConfig(level=logging.INFO, format=log_format, datefmt=date_format)
-    # logging.getLogger().setLevel(logging.INFO)
+
     evaluation(**vars(args))

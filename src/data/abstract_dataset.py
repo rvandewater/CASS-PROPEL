@@ -1,6 +1,6 @@
 import pandas as pd
 from src.utils.plot import data_exploration_comparison, data_exploration
-
+import logging as log
 
 class Dataset:
     def __init__(self,
@@ -214,7 +214,7 @@ class Dataset:
         if external_validation_data is not None:
             drop_columns_list.extend(set(original_data.columns).difference(set(external_validation_data.columns)))
 
-        print(drop_columns_list)
+        log.debug(f"Drop columns:{drop_columns_list}")
 
         if feature_set is not None:
             drop_columns_list.extend(list(self.data_infos.loc[
@@ -224,7 +224,7 @@ class Dataset:
         if drop_columns:
             drop_columns_list.extend(list(self.data_infos.loc[self.data_infos['drop'], 'column_name']))
             # Remove the updated values from esophagus_info_updated
-            print(list(set(self.data_infos.column_name.values).difference(set(original_data.columns.values))))
+            log.debug(f"Column difference: {list(set(self.data_infos.column_name.values).difference(set(original_data.columns.values)))}")
             difference = list(set(self.data_infos.column_name.values).difference(set(original_data.columns.values)))
             self.data_infos = self.data_infos[~self.data_infos["column_name"].isin(difference)]
         original_data.drop(columns=drop_columns_list, inplace=True, errors='ignore')
