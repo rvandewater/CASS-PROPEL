@@ -1,4 +1,4 @@
-name: propel
+name: propel-2
 channels:
   - conda-forge
   - anaconda
@@ -20,3 +20,4 @@ dependencies:
     - sweetviz==2.1.4
     - wandb==0.16.1
     - xgboost==2.0.3
+    - hyperopt==0.2.7

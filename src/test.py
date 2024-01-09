@@ -75,7 +75,7 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
     if model_name == 'DecisionTreeClassifier':
         plt.figure(figsize=(50, 50))
         tree.plot_tree(estimator, feature_names=feature_names, filled=True, rounded=True, fontsize=10)
-        plt.savefig(f'{out_dir}/{y_train.name.replace(" ", "_")}/test/{model_name}_tree.pdf'.replace(' ', '_'), bbox_inches='tight')
+        plt.savefig(f'{out_dir}/test/{model_name}_tree.pdf'.replace(' ', '_'), bbox_inches='tight')
     # ===== Calibration Curves =====
     if not (model_name == 'LinearSVC'):
         plot_calibration_curves(X_test, y_test, y_train.name, model, model_name, out_dir)

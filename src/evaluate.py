@@ -18,11 +18,11 @@ from src.utils.plot import plot_val_mean_prec_rec, plot_val_mean_roc, plot_confu
 
 def evaluate_single_model(model, param_grid,
                           X_train, y_train, X_test, y_test,
-                          cv_splits=8, cv_scoring='average_precision', select_features=True, shap_value_eval=False,
+                          cv_splits=5, cv_scoring='average_precision', select_features=True, shap_value_eval=False,
                           cm_agg_type='sum', out_dir='results/default', sample_balancing=None, seed=42):
 
-    os.makedirs(f'{out_dir}/{y_train.name.replace(" ", "_")}/val/', exist_ok=True)
-    os.makedirs(f'{out_dir}/{y_train.name.replace(" ", "_")}/test/', exist_ok=True)
+    os.makedirs(f'{out_dir}/val/', exist_ok=True)
+    os.makedirs(f'{out_dir}/test/', exist_ok=True)
     model_name = str(model.__class__.__name__)
 
     # ================= SETTING UP K-FOLD OR LOO CV =================
@@ -87,8 +87,8 @@ def evaluate_single_model(model, param_grid,
     if cv_scoring is None:
         cv_scoring = "average_precision"
 
-    grid_model = RandomizedSearchCV(pipeline, param_distributions=param_grid, scoring=cv_scoring, verbose=False, cv=cv, n_jobs=-1,
-                              error_score=0, n_iter=20)
+    grid_model = RandomizedSearchCV(pipeline, param_distributions=param_grid, scoring=cv_scoring, verbose=False, cv=cv, n_jobs=1,
+                              error_score=0, n_iter=1)
     grid_model.fit(X_train, y_train)
     log.info("Fitted model")
 
@@ -110,6 +110,18 @@ def evaluate_single_model(model, param_grid,
     log.info(f'Best Params: {grid_model.best_params_} - {cv_scoring}: {grid_model.best_score_}')
     best_model = grid_model.best_estimator_
 
+    cv_metrics, mean_tpr, overall_precision, overall_recall = independent_validation(X_test, X_train, all_metrics_list,
+                                                                                     best_model, cm_agg_type, cv, cv_splits,
+                                                                                     model_name, out_dir, select_features,
+                                                                                     shap_value_eval, y_test, y_train)
+    # =================== Final Model Testing ===============
+    test_metrics, test_curves = test_classification_model(best_model, X_train, y_train, X_test, y_test,
+                                                          model_name, select_features, out_dir)
+    return cv_metrics, test_metrics, ((mean_tpr, overall_precision, overall_recall), test_curves)
+
+
+def independent_validation(X_test, X_train, all_metrics_list, best_model, cm_agg_type, cv, cv_splits, model_name, out_dir,
+                           select_features, shap_value_eval, y_test, y_train):
     # ================= PERFORMING CV AGAIN WITH BEST MODEL FOR PLOTS AND RESULTS =================
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
     ax1.set_aspect('equal')
@@ -117,13 +129,10 @@ def evaluate_single_model(model, param_grid,
     fig.suptitle(f'{model_name} predicting {y_test.name}')
     # ROC values
     tprs = []
-
     x_linspace = np.linspace(0, 1, 101)
-
     cv_metrics = {metric: [] for metric in all_metrics_list}
     ys_real = []
     ys_proba = []
-
     # Perform k-fold cross validation
     for i, (train, val) in enumerate(cv.split(X_train, y_train)):
         cv_X_train = X_train.iloc[train]
@@ -164,39 +173,29 @@ def evaluate_single_model(model, param_grid,
         model_metrics['prc_auc'] = aucprs
 
         cv_metrics = {key: value + [model_metrics[key]] for (key, value) in cv_metrics.items()}
-
     # Plot ROC
     mean_tpr = plot_val_mean_roc(ax1, tprs, cv_metrics['roc_auc'], x_linspace)
-
     # Plot Precision_Recall
     overall_precision, overall_recall, overall_prc_auc = plot_val_mean_prec_rec(ax2, np.concatenate(ys_real),
                                                                                 np.concatenate(ys_proba),
                                                                                 (sum(y_train == 1) / len(y_train)))
-
     # Plot SHAP values
     if shap_value_eval:
         plot_shap_values(X_test, X_train, y_train, cv, best_model, model_name, out_dir, select_features)
-
     # all_model_metrics['prc_auc'] = overall_prc_auc
-
-    plt.savefig(f'{out_dir}/{y_train.name}/val/{model_name}_roc_prc_curves'.replace(' ', '_'), bbox_inches='tight')
+    plt.savefig(f'{out_dir}/val/{model_name}_roc_prc_curves'.replace(' ', '_'), bbox_inches='tight')
     plt.close()
-
     # Plot confusion matrix
     val_cm = sum(cv_metrics['confusion_matrix'])
     if cm_agg_type == 'mean':
         val_cm = val_cm / cv_splits
     plot_confusion_matrix(y_train.name, val_cm, model_name, out_dir, "val")
-
     cm_fig, ax = plt.subplots()
     cm_fig.suptitle(f'{model_name} predicting {y_test.name}')
     disp = ConfusionMatrixDisplay(confusion_matrix=val_cm,
                                   display_labels=[0, 1])
     disp.plot(include_values=True, cmap='Blues', ax=ax,
               xticks_rotation='horizontal', values_format='d')
-    plt.savefig(f'{out_dir}/{y_train.name}/val/{model_name}_cm'.replace(' ', '_'))
+    plt.savefig(f'{out_dir}/val/{model_name}_cm'.replace(' ', '_'))
     plt.close()
-    # =================== Final Model Testing ===============
-    test_metrics, test_curves = test_classification_model(best_model, X_train, y_train, X_test, y_test,
-                                                          model_name, select_features, out_dir)
-    return cv_metrics, test_metrics, ((mean_tpr, overall_precision, overall_recall), test_curves)
+    return cv_metrics, mean_tpr, overall_precision, overall_recall

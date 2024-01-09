@@ -42,8 +42,8 @@ def get_parser():
                         help='Threshold for dropping columns with high correlation')
     parser.add_argument('--data_exploration', '-ex', nargs='*', type=bool, default=False,
                         help='If true, an html file will be generated showing statistics of the parsed dataset')
-    parser.add_argument('--seed', '-s', type=int, default=42,
-                        help='If true, a seed will be set for reproducibility')
+    parser.add_argument('--seeds', '-s', type=list, default=[111,222,333],
+                        help='List of seeds for reproducibility, also determines individual repetitions')
     parser.add_argument('--cores', '-c', type=int, default=8,
                         help='Number of cores to use for parallel processing')
 
