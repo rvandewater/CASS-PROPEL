@@ -66,7 +66,7 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
     X, Y = common_preprocessing(data, imputer=imputer, normaliser=normaliser, validation=False,
                                 missing_threshold=missing_threshold, corr_threshold=correlation_threshold)
     log.info(f"{bars} Preprocessing complete {bars}")
-    log.info(list(X.columns))
+    log.debug(f"Columns:{list(X.columns)}")
 
     # Preprocess external validation data
     if external_test_data:
@@ -93,6 +93,7 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
     for k, endpoint in enumerate(Y.columns):
         out_dir_endpoint = f'{out_dir}/{endpoint.replace(" ", "_")}'
         log.info(f'Predicting {endpoint}')
+
         # Set endpoint for iteration
         y = Y[endpoint]
         pretune_model = None
@@ -110,24 +111,25 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
 
             log.info(Y.info())
 
-            if nested_cv:
-                if not external_test_data:
+            if nested_cv and not external_test_data:
+                    log.info(f"Using nested CV")
                     model = nested_crossval(X, all_model_metrics, artificial_balancing_option, cv_splits, endpoint,
                                             out_dir_seed, seed, select_features, shap_eval, y, pretune_model=pretune_model)
-                else:
-                    raise ValueError('Nested CV is not possible with external validation data')
             else:
                 # If we do not have an external validation dataset, we split the original dataset
                 if not external_test_data:
                     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_fraction,
                                                                         random_state=seed, shuffle=True, stratify=y)
+                    log.info(f"Using regular CV")
                 else:
                     # If we have an external validation dataset, we use the original dataset as training data
                     X_train = X
                     y_train = y
                     # Set test data to be external validation data
                     X_test = X_val
-                    y_test = Y_val
+                    # Set endpoint for iteration
+                    y_test = Y_val[endpoint]
+                    log.info(f"Using external validation data as test data")
 
                 # Feature selection for each endpoint only on training data
                 # X_test, X_train = model_feature_selection(X_test, X_train, y_train, min_feature_fraction=0.5, cores=cores,
