@@ -12,33 +12,23 @@ from src.utils.plot import plot_coefficients, plot_roc_pr_curve, plot_confusion_
     plot_shap_values
 
 
-def test_classification_model(model, X_train, y_train, X_test, y_test, model_name, select_features, out_dir):
+def test_classification_model(model, X_train, y_train, X_test, y_test, model_name, selector, out_dir, calibration=True):
+    if calibration:
+        log.info("Calibrating model")
+        #Re-fit complete training set
+        model.fit(X_train, y_train)
+        plot_calibration_curves(X_test, y_test, y_train.name, model, model_name + "_uncalibrated", out_dir)
+        # We use prefit as we want to fit on the entire training set
+        calibration = CalibratedClassifierCV(model, method='sigmoid', cv="prefit", n_jobs=1)
+        model = calibration.fit(X_train, y_train)
 
-    log.info("Calibrating model")
-    # Re-fit complete training set
-    # model.fit(X_train, y_train)
-    # TODO: improve calibration
-    plot_calibration_curves(X_test, y_test, y_train.name, model, model_name+"_uncalibrated", out_dir)
-    # We use prefit as we want to fit on the entire training set
-
-    calibration = CalibratedClassifierCV(model, method='sigmoid', cv="prefit", n_jobs=1)
-    model = calibration.fit(X_train, y_train)
-
-    # Re-fit complete training set
-    # model.fit(X_train, y_train)
-
-    # Determine optimal classification threshold
     def to_labels(pos_probs, threshold):
         return (pos_probs >= threshold).astype('int')
 
-    y_probas = positive_class_probability(model, X_test)
-    thresholds = np.linspace(0, 1, 101)
-    scores = [f1_score(y_test, to_labels(y_probas, t)) for t in thresholds]
-    ix = np.argmax(scores)
-    optimal_threshold = thresholds[ix]
-    optimal_f1 = scores[ix]
-    # with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
-    #     f.write(f'optimal classification threshold: {optimal_threshold} with F1-Score {optimal_f1}\n\n')
+    # Determine optimal classification threshold
+    optimal_threshold, thresholds, y_probas = optimal_classification_threshold(X_test, model, to_labels, y_test)
+
+    # Compute standard test metrics
     test_metrics = compute_classification_metrics(y_test, to_labels(y_probas, optimal_threshold))
 
     # ==== ROC & AUPRC ====
@@ -47,7 +37,6 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
     test_metrics['avg_precision'] = prc_plot.average_precision
     aucprs = auc(prc_plot.recall, prc_plot.precision)
     test_metrics['prc_auc'] = aucprs
-
     plt.close()
 
     # ===== Confusion Matrix ====
@@ -66,9 +55,8 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
     # log.info(f"Estimator: {estimator.estimator}")
     feature_importances = get_feature_importance(estimator)
     shaps = plot_shap_values(X_test, X_train, y_train, estimator, model_name, out_dir, False)
-    # shaps = None
-    select_features = False
-    if select_features:
+
+    if selector is not None:
         feature_names = X_train.columns[selector.get_support()]
         with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
             f.write(f'selected features: {feature_names}\n')
@@ -76,16 +64,19 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
     else:
         feature_names = X_train.columns
 
+    # Save model inherent feature importances
     if feature_importances is not None:
         feature_importance = pd.DataFrame([feature_importances], columns=feature_names.values)
         feature_importance.to_csv(f'{out_dir}/{model_name}_feature_importance.csv')
         plot_coefficients(out_dir, feature_importances, feature_names, model_name, y_test.name)
 
-    #===== Decision Tree =====
+    # Decision Tree: plot tree
     if model_name == 'DecisionTreeClassifier':
         plt.figure(figsize=(50, 50))
         tree.plot_tree(estimator, feature_names=feature_names, filled=True, rounded=True, fontsize=10)
         plt.savefig(f'{out_dir}/test/{model_name}_tree.pdf'.replace(' ', '_'), bbox_inches='tight')
+        plt.close()
+
     # ===== Calibration Curves =====
     if not (model_name == 'LinearSVC'):
         plot_calibration_curves(X_test, y_test, y_train.name, model, model_name, out_dir)
@@ -93,3 +84,16 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
     interp_tpr = np.interp(thresholds, roc_plot.fpr, roc_plot.tpr, left=0.0)
 
     return test_metrics, (interp_tpr, prc_plot.precision, prc_plot.recall), shaps
+
+
+def optimal_classification_threshold(X_test, model, to_labels, y_test):
+    y_probas = positive_class_probability(model, X_test)
+    thresholds = np.linspace(0, 1, 101)
+    scores = [f1_score(y_test, to_labels(y_probas, t)) for t in thresholds]
+    ix = np.argmax(scores)
+    optimal_threshold = thresholds[ix]
+    optimal_f1 = scores[ix]
+    # with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
+    #     f.write(f'optimal classification threshold: {optimal_threshold} with F1-Score {optimal_f1}\n\n')
+    log.info(f'Optimal classification threshold: {optimal_threshold} with F1-Score {optimal_f1}')
+    return optimal_threshold, thresholds, y_probas

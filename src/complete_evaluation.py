@@ -157,7 +157,6 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
                 #     # Save summary plots across models
                 #     generate_summary_plots(all_model_metrics, endpoint, model, out_dir_seed, y)
 
-                # pickle.dump(all_model_metrics, open(f'{out_dir_seed}/{model_label}_all_model_metrics.pkl', 'wb'))
             # We take the shap values from all models and generate one SHAP plot per seed
             for model_name in all_model_metrics['model'].unique():
                 shap_tuples = all_model_metrics[all_model_metrics['model'] == model_name]['shaps']

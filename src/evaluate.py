@@ -16,7 +16,7 @@ from src.utils.plot import plot_val_mean_prec_rec, plot_val_mean_roc, plot_confu
 
 def evaluate_single_cv_split(model, param_grid,
                           X_train, y_train, X_test, y_test,
-                          cv_splits=5, cv_scoring='log_loss', select_features=True, shap_value_eval=False,
+                          cv_splits=5, cv_scoring='log_loss', select_features=False, shap_value_eval=False,
                           cm_agg_type='sum', out_dir='results/default', sample_balancing=None, seed=42, search_method='random'):
     os.makedirs(f'{out_dir}/val/', exist_ok=True)
     os.makedirs(f'{out_dir}/test/', exist_ok=True)
@@ -42,7 +42,7 @@ def evaluate_single_cv_split(model, param_grid,
 
     # Define list with steps for the pipeline
     pipeline_steps = []
-    # sample_balancing = 'SMOTE'
+
     # ================= ADD BALANCING TO PIPELINE IF SELECTED =================
     if sample_balancing in ['random_oversampling', 'SMOTE', 'ADASYN']:
         log.info(f'Performing random oversampling via {sample_balancing} algorithm.')
@@ -51,8 +51,10 @@ def evaluate_single_cv_split(model, param_grid,
             over_sampler = RandomOverSampler(random_state=seed)  # todo possibly reduce ratio to sth like 0.5
         elif sample_balancing == 'SMOTE':
             over_sampler = SMOTE(n_jobs=-1, random_state=seed)
-        else:  # args.balancing_option == 'ADASYN'
+        elif sample_balancing == 'ADASYN':
             over_sampler = ADASYN(n_jobs=-1, random_state=seed)
+        else:
+            raise ValueError(f'Unknown balancing option {sample_balancing}')
 
         # log.info(f'n samples after:  {len(endpoint[endpoint == 0])} vs. {len(endpoint[endpoint == 1])}')
         pipeline_steps.append(('over_sampling', over_sampler))
@@ -61,14 +63,12 @@ def evaluate_single_cv_split(model, param_grid,
 
     # prepare param_grid
     param_grid = {'model__' + key: value for (key, value) in param_grid.items()}
-    select_features = False
     if select_features:
         # Feature selection for each endpoint only on training data
         param_grid['selector'] = [model_feature_selection(X_test, X_train, y_train, min_feature_fraction=0.5, cores=1,
                                                           scoring=make_scorer(average_precision_score))]
+        # Use XGBClassifier for feature selection
         param_grid['selector'] = [SelectFromModel(XGBClassifier())]
-        # param_grid['selector'] = [SelectKBest(k='all'), SelectKBest(k=25),
-        #                           SelectFromModel(LinearSVC(C=1, penalty="l1", dual=False, max_iter=5000))]
 
         pipeline_steps.extend([('selector', 'passthrough'), ('model', model)])
     else:
@@ -148,7 +148,6 @@ def evaluate_single_model(model, param_grid,
 
     # Define list with steps for the pipeline
     pipeline_steps = []
-    # sample_balancing = 'SMOTE'
     # ================= ADD BALANCING TO PIPELINE IF SELECTED =================
     if sample_balancing in ['random_oversampling', 'SMOTE', 'ADASYN']:
         log.info(f'Performing random oversampling via {sample_balancing} algorithm.')
@@ -156,9 +155,11 @@ def evaluate_single_model(model, param_grid,
         if sample_balancing == 'random_oversampling':
             over_sampler = RandomOverSampler(random_state=seed)  # todo possibly reduce ratio to sth like 0.5
         elif sample_balancing == 'SMOTE':
-            over_sampler = SMOTE(random_state=seed)
-        else:  # args.balancing_option == 'ADASYN'
-            over_sampler = ADASYN(random_state=seed)
+            over_sampler = SMOTE(n_jobs=-1, random_state=seed)
+        elif sample_balancing == 'ADASYN':
+            over_sampler = ADASYN(n_jobs=-1, random_state=seed)
+        else:
+            raise ValueError(f'Unknown balancing option {sample_balancing}')
 
         # log.info(f'n samples after:  {len(endpoint[endpoint == 0])} vs. {len(endpoint[endpoint == 1])}')
         pipeline_steps.append(('over_sampling', over_sampler))
