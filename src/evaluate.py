@@ -14,13 +14,10 @@ from src.test import test_classification_model
 from src.utils.metrics import all_classification_metrics_list, compute_classification_metrics
 from src.utils.plot import plot_val_mean_prec_rec, plot_val_mean_roc, plot_confusion_matrix, plot_shap_values
 
-
-
-def evaluate_single_model(model, param_grid,
+def evaluate_single_cv_split(model, param_grid,
                           X_train, y_train, X_test, y_test,
-                          cv_splits=5, cv_scoring='average_precision', select_features=True, shap_value_eval=False,
-                          cm_agg_type='sum', out_dir='results/default', sample_balancing=None, seed=42):
-
+                          cv_splits=5, cv_scoring='log_loss', select_features=True, shap_value_eval=False,
+                          cm_agg_type='sum', out_dir='results/default', sample_balancing=None, seed=42, search_method='random'):
     os.makedirs(f'{out_dir}/val/', exist_ok=True)
     os.makedirs(f'{out_dir}/test/', exist_ok=True)
     model_name = str(model.__class__.__name__)
@@ -45,7 +42,7 @@ def evaluate_single_model(model, param_grid,
 
     # Define list with steps for the pipeline
     pipeline_steps = []
-
+    # sample_balancing = 'SMOTE'
     # ================= ADD BALANCING TO PIPELINE IF SELECTED =================
     if sample_balancing in ['random_oversampling', 'SMOTE', 'ADASYN']:
         log.info(f'Performing random oversampling via {sample_balancing} algorithm.')
@@ -53,7 +50,7 @@ def evaluate_single_model(model, param_grid,
         if sample_balancing == 'random_oversampling':
             over_sampler = RandomOverSampler(random_state=seed)  # todo possibly reduce ratio to sth like 0.5
         elif sample_balancing == 'SMOTE':
-            over_sampler = SMOTE(n_jobs=-1, sampling_strategy=0.2689, random_state=seed)
+            over_sampler = SMOTE(n_jobs=-1, random_state=seed)
         else:  # args.balancing_option == 'ADASYN'
             over_sampler = ADASYN(n_jobs=-1, random_state=seed)
 
@@ -68,7 +65,7 @@ def evaluate_single_model(model, param_grid,
     if select_features:
         # Feature selection for each endpoint only on training data
         param_grid['selector'] = [model_feature_selection(X_test, X_train, y_train, min_feature_fraction=0.5, cores=1,
-                                                  scoring=make_scorer(average_precision_score))]
+                                                          scoring=make_scorer(average_precision_score))]
         param_grid['selector'] = [SelectFromModel(XGBClassifier())]
         # param_grid['selector'] = [SelectKBest(k='all'), SelectKBest(k=25),
         #                           SelectFromModel(LinearSVC(C=1, penalty="l1", dual=False, max_iter=5000))]
@@ -83,12 +80,16 @@ def evaluate_single_model(model, param_grid,
     # Define metrics used
     all_metrics_list = all_classification_metrics_list
 
-    # Default CV scoring
-    if cv_scoring is None:
-        cv_scoring = "average_precision"
-
-    grid_model = RandomizedSearchCV(pipeline, param_distributions=param_grid, scoring=cv_scoring, verbose=False, cv=cv, n_jobs=1,
-                              error_score=0, n_iter=1)
+    if search_method == 'grid':
+        grid_model = GridSearchCV(pipeline, param_grid=param_grid, scoring=cv_scoring, verbose=False, cv=cv,
+                                  n_jobs=-1,
+                                  error_score=0)
+    elif search_method == 'random':
+        grid_model = RandomizedSearchCV(pipeline, param_distributions=param_grid, scoring=cv_scoring, verbose=False, cv=cv,
+                                        n_jobs=-1,
+                                        error_score=0, n_iter=10)
+    else:
+        raise ValueError(f'Unknown method {search_method}')
     grid_model.fit(X_train, y_train)
     log.info("Fitted model")
 
@@ -108,6 +109,7 @@ def evaluate_single_model(model, param_grid,
         f.write('\n' + model_name)
         f.write(f'\nBest Params: {grid_model.best_params_}\n')
     log.info(f'Best Params: {grid_model.best_params_} - {cv_scoring}: {grid_model.best_score_}')
+
     best_model = grid_model.best_estimator_
 
     cv_metrics, mean_tpr, overall_precision, overall_recall = independent_validation(X_test, X_train, all_metrics_list,
@@ -118,11 +120,142 @@ def evaluate_single_model(model, param_grid,
     test_metrics, test_curves = test_classification_model(best_model, X_train, y_train, X_test, y_test,
                                                           model_name, select_features, out_dir)
     return cv_metrics, test_metrics, ((mean_tpr, overall_precision, overall_recall), test_curves)
+def evaluate_single_model(model, param_grid,
+                          X_train, y_train, X_test, y_test,
+                          cv_splits=5, cv_scoring='average_precision', select_features=True, shap_value_eval=False,
+                          cm_agg_type='sum', out_dir='results/default', sample_balancing=None, seed=42, search_method='random'):
+    os.makedirs(f'{out_dir}/val/', exist_ok=True)
+    os.makedirs(f'{out_dir}/test/', exist_ok=True)
+    model_name = str(model.__class__.__name__)
+
+    # ================= SETTING UP K-FOLD OR LOO CV =================
+    if cv_splits > 0:
+        log.info(f'Evaluating model {model_name} with {cv_splits}-fold CV')
+        log.info(
+            f'Total split into Train/Val/Test: {round(100 * (cv_splits - 1) / cv_splits * len(y_train) / (len(y_train) + len(y_test)))}/' +
+            f'{round(100 / cv_splits * len(y_train) / (len(y_train) + len(y_test)))}/{round(100 * len(y_test) / (len(y_train) + len(y_test)))}' +
+            f' - Absolute Samples: {len(y_train) - round(len(y_train) / cv_splits)}/{round(len(y_train) / cv_splits)}/{len(y_test)}')
+
+        cv = StratifiedKFold(n_splits=cv_splits, shuffle=True, random_state=seed)
+    else:
+        log.info(f'Evaluating model {model_name} with LOO-CV')
+        log.info(
+            f'Total split into Train+Val/Test: {round(100 * len(y_train) / (len(y_train) + len(y_test)))}/' +
+            f'{round(100 * len(y_test) / (len(y_train) + len(y_test)))}' +
+            f' - Absolute Samples: {len(y_train) - 1}/1/{len(y_test)}')
+
+        cv = LeaveOneOut()
+
+    # Define list with steps for the pipeline
+    pipeline_steps = []
+    # sample_balancing = 'SMOTE'
+    # ================= ADD BALANCING TO PIPELINE IF SELECTED =================
+    if sample_balancing in ['random_oversampling', 'SMOTE', 'ADASYN']:
+        log.info(f'Performing random oversampling via {sample_balancing} algorithm.')
+        log.info(f'n samples before: {len(y_train[y_train == 0])} vs. {len(y_train[y_train == 1])}')
+        if sample_balancing == 'random_oversampling':
+            over_sampler = RandomOverSampler(random_state=seed)  # todo possibly reduce ratio to sth like 0.5
+        elif sample_balancing == 'SMOTE':
+            over_sampler = SMOTE(random_state=seed)
+        else:  # args.balancing_option == 'ADASYN'
+            over_sampler = ADASYN(random_state=seed)
+
+        # log.info(f'n samples after:  {len(endpoint[endpoint == 0])} vs. {len(endpoint[endpoint == 1])}')
+        pipeline_steps.append(('over_sampling', over_sampler))
+
+    # ================= SELECT OPTIMAL MODEL AND FEATURE SET THROUGH CV =================
+    pretune = True
+    # Define metrics used
+    all_metrics_list = all_classification_metrics_list
+
+    if not pretune:
+        # prepare param_grid
+        param_grid = {'model__' + key: value for (key, value) in param_grid.items()}
+        select_features = False
+        if select_features:
+            # Feature selection for each endpoint only on training data
+            param_grid['selector'] = [model_feature_selection(X_test, X_train, y_train, min_feature_fraction=0.5, cores=1,
+                                                              scoring=make_scorer(average_precision_score))]
+            param_grid['selector'] = [SelectFromModel(XGBClassifier())]
+            # param_grid['selector'] = [SelectKBest(k='all'), SelectKBest(k=25),
+            #                           SelectFromModel(LinearSVC(C=1, penalty="l1", dual=False, max_iter=5000))]
+
+            pipeline_steps.extend([('selector', 'passthrough'), ('model', model)])
+        else:
+            pipeline_steps.append(('model', model))
+
+        pipeline = Pipeline(pipeline_steps)
+        log.info(f"Using pipeline {pipeline}")
+
+        if search_method == 'grid':
+            grid_model = GridSearchCV(pipeline, param_grid=param_grid, scoring=cv_scoring, verbose=False, cv=cv,
+                                      n_jobs=-1,
+                                      error_score=0)
+        elif search_method == 'random':
+            grid_model = RandomizedSearchCV(pipeline, param_distributions=param_grid, scoring=cv_scoring, verbose=False, cv=cv,
+                                            n_jobs=1,
+                                            error_score=0, n_iter=10)
+        else:
+            raise ValueError(f'Unknown method {search_method}')
+        grid_model.fit(X_train, y_train)
+        best_model = grid_model.best_estimator_
+    else:
+        grid_model = model
+        best_model = grid_model.fit(X_train, y_train)
+    log.info("Fitted model")
+
+
+
+    try:
+        pass
+    except ValueError as ve:
+        log.info(ve)
+        with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
+            f.write('\n' + model_name)
+            f.write(f'GridSearch Failed due to incompatible options in best selected model.\n')
+        log.warning("GridSearch Failed due to incompatible options in best selected model.")
+        empty_cm = np.zeros((2, 2))
+        return {metric: ([0.0] if metric != 'confusion_matrix' else [empty_cm] * cv_splits) for metric in all_metrics_list}, \
+            {metric: (0.0 if metric != 'confusion_matrix' else empty_cm) for metric in all_metrics_list}, \
+            (([0] * 101, [0] * 101, [0] * 101), ([0] * 101, [0] * 101, [0] * 101))
+    # with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
+    #     f.write('\n' + model_name)
+    #     f.write(f'\nBest Params: {grid_model.best_params_}\n')
+    # log.info(f'Best Params: {grid_model.best_params_} - {cv_scoring}: {grid_model.best_score_}')
+
+    cv_metrics, mean_tpr, overall_precision, overall_recall = independent_validation(X_test, X_train, all_metrics_list,
+                                                                                     best_model, cm_agg_type, cv, cv_splits,
+                                                                                     model_name, out_dir, select_features,
+                                                                                     shap_value_eval, y_test, y_train)
+    # =================== Final Model Testing ===============
+    test_metrics, test_curves, shaps = test_classification_model(best_model, X_train, y_train, X_test, y_test,
+                                                          model_name, select_features, out_dir)
+    return cv_metrics, test_metrics, ((mean_tpr, overall_precision, overall_recall), test_curves), best_model, (shaps,list(X_test.index))
 
 
 def independent_validation(X_test, X_train, all_metrics_list, best_model, cm_agg_type, cv, cv_splits, model_name, out_dir,
                            select_features, shap_value_eval, y_test, y_train):
-    # ================= PERFORMING CV AGAIN WITH BEST MODEL FOR PLOTS AND RESULTS =================
+    """
+        Performs cross-validation with selected model on the test set and plots the ROC and Precision-Recall curves.
+
+    Args:
+        X_test:
+        X_train:
+        all_metrics_list:
+        best_model:
+        cm_agg_type:
+        cv:
+        cv_splits:
+        model_name:
+        out_dir:
+        select_features:
+        shap_value_eval:
+        y_test:
+        y_train:
+
+    Returns: cv_metrics, mean_tpr, overall_precision, overall_recall
+
+    """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
     ax1.set_aspect('equal')
     ax2.set_aspect('equal')

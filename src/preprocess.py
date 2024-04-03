@@ -7,7 +7,7 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.impute import KNNImputer, SimpleImputer
 from sklearn.experimental import enable_iterative_imputer
 from xgboost import XGBClassifier
-
+import warnings
 # from src.utils.feature_selector import FeatureSelector
 from src.data.abstract_dataset import Dataset
 import logging as log
@@ -16,7 +16,7 @@ import logging as log
 def common_preprocessing(data: Dataset,
                          imputer="knn",
                          normaliser='standard',
-                         missing_threshold=0.5,
+                         missing_threshold=0.8,
                          corr_threshold=0.95,
                          validation=False):
     """
@@ -44,7 +44,15 @@ def common_preprocessing(data: Dataset,
         X = pd.concat([X, X_or], ignore_index=True)
         Y = pd.concat([Y, Y_or], ignore_index=True)
 
-    X.dropna(thresh = len(X)*missing_threshold, axis = 1, inplace = True)
+    # row_missingness_tresh = int(len(X.columns)*0.50)
+    # col_missingness_tresh = int(len(X)*0.40)
+    # log.info(f"Shape of X: {X.shape}, dropping rows with missing values {row_missingness_tresh}, "
+    #          f"columns with missing values {col_missingness_tresh}")
+    # row_indices = X.dropna(thresh = row_missingness_tresh, axis = 0)
+    # X.dropna(thresh = col_missingness_tresh, axis = 1, inplace=True)
+    # log.info(f"Shape of X after dropping: {X.shape}")
+    # intersection = row_indices.index.intersection(X.index)
+    # Y = Y.loc[intersection]
 
     log.debug("Categorical features:")
     log.debug(data.get_categorical_features())
@@ -56,7 +64,7 @@ def common_preprocessing(data: Dataset,
     #     X["Histologie"] = X["Histologie"].astype("int")
 
     # One-hot-encode categorical features
-    X = pd.get_dummies(X, columns=categorical_features, dummy_na=False)
+    X = pd.get_dummies(X, columns=categorical_features, dummy_na=False, dtype="float64")
 
 
     # Apply FeatureSelector functionality
@@ -71,18 +79,20 @@ def common_preprocessing(data: Dataset,
     #         log.info(fs.removal_ops['collinear'])
     #     X = fs.remove(X, fs_operations, one_hot=False)
 
-    X = drop_correlated(X, corr_threshold)
+    # X = drop_correlated(X, corr_threshold)
 
     # Fix strings in Binary columns
     for binary_col in data.get_binary_features():
         if binary_col in X.columns:
             unique_vals = list(np.unique(X[binary_col].values))
             if len(unique_vals) < 2:
-                raise AssertionError(f"Binary column {binary_col} has less than 2 unique values.")
+                warnings.warn(f"Binary column {binary_col} has less than 2 unique values.", UserWarning)
+                # raise AssertionError(f"Binary column {binary_col} has less than 2 unique values.")
             if len(unique_vals) != 1 and unique_vals != [0, 1]:
                 log.debug(f'Renaming entries from {binary_col}: {unique_vals[0]} -> 0; {unique_vals[1]} -> 1')
                 X[binary_col].replace({unique_vals[0]: 0,
                                        unique_vals[1]: 1}, inplace=True)
+
 
     X_numerical = X[[col for col in X.columns if col in data.get_numerical_features()]]
     X_binary = X.drop(columns=[col for col in X.columns if col in data.get_numerical_features()])
@@ -121,12 +131,17 @@ def common_preprocessing(data: Dataset,
         X_numerical = pd.DataFrame(X_numerical, columns=X_numerical_feature_names)
 
     # Build X and y arrays
-    X = pd.concat([X_binary, X_numerical], axis=1)
+    # X = pd.concat([X_binary, X_numerical], axis=1)
+    log.info(f"Intersection:{len(X_numerical.index.intersection(X_binary.index))}")
+    X = X_binary.join(X_numerical, how="outer")
+    # X = X.loc[row_indices.index]
 
     if validation:
         X = X.head(validation_samples)
         Y = Y.head(validation_samples)
         Y = Y.fillna(value=0)
+
+
 
     log.info(f'Class distributions for {len(Y)} data points, validation={validation}:')
     for y_col in Y:

@@ -1,7 +1,7 @@
 import argparse
 import logging
 
-from complete_evaluation import evaluation
+from src.complete_evaluation import evaluation
 
 
 def get_parser():
@@ -56,7 +56,7 @@ if __name__ == '__main__':
     date_format = "%Y-%m-%d %H:%M:%S"
     # logger = logging.getLogger()
     # logger.setLevel(logging.INFO)
-    logging.basicConfig(level=logging.DEBUG, format=log_format, datefmt=date_format, force=True)
+    logging.basicConfig(level=logging.INFO, format=log_format, datefmt=date_format, force=True)
     logging.info('Starting evaluation...')
     arg_parser = get_parser()
     args = arg_parser.parse_args()

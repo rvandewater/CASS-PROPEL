@@ -8,7 +8,8 @@ from sklearn.metrics import f1_score, auc
 import logging as log
 from src.models import get_feature_importance, positive_class_probability
 from src.utils.metrics import compute_classification_metrics
-from src.utils.plot import plot_coefficients, plot_roc_pr_curve, plot_confusion_matrix, plot_calibration_curves
+from src.utils.plot import plot_coefficients, plot_roc_pr_curve, plot_confusion_matrix, plot_calibration_curves, \
+    plot_shap_values
 
 
 def test_classification_model(model, X_train, y_train, X_test, y_test, model_name, select_features, out_dir):
@@ -17,8 +18,10 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
     # Re-fit complete training set
     # model.fit(X_train, y_train)
     # TODO: improve calibration
+    plot_calibration_curves(X_test, y_test, y_train.name, model, model_name+"_uncalibrated", out_dir)
     # We use prefit as we want to fit on the entire training set
-    calibration = CalibratedClassifierCV(model, method='isotonic', cv="prefit", n_jobs=1)
+
+    calibration = CalibratedClassifierCV(model, method='sigmoid', cv="prefit", n_jobs=1)
     model = calibration.fit(X_train, y_train)
 
     # Re-fit complete training set
@@ -34,8 +37,8 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
     ix = np.argmax(scores)
     optimal_threshold = thresholds[ix]
     optimal_f1 = scores[ix]
-    with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
-        f.write(f'optimal classification threshold: {optimal_threshold} with F1-Score {optimal_f1}\n\n')
+    # with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
+    #     f.write(f'optimal classification threshold: {optimal_threshold} with F1-Score {optimal_f1}\n\n')
     test_metrics = compute_classification_metrics(y_test, to_labels(y_probas, optimal_threshold))
 
     # ==== ROC & AUPRC ====
@@ -49,15 +52,22 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
 
     # ===== Confusion Matrix ====
     plot_confusion_matrix(y_train.name, test_metrics['confusion_matrix'], model_name, out_dir, "test")
-    log.info(model)
-    # estimator = model.estimator.named_steps['model']
-    # selector = model.estimator.named_steps['selector']
-    estimator = model.calibrated_classifiers_[0].estimator.named_steps['model']
-    if select_features:
-        selector = model.calibrated_classifiers_[0].estimator.named_steps['selector']
-    # ===== Feature Importances =====
-    feature_importances = get_feature_importance(estimator)
+    log.debug(model)
+    # # estimator = model.estimator.named_steps['model']
+    # # selector = model.estimator.named_steps['selector']
+    if isinstance(model, CalibratedClassifierCV):
+        log.info(f"Extracting estimator from calibrated wrapper")
+        estimator = model.calibrated_classifiers_[0].estimator#.named_steps['model']
+    # # if select_features:
+    # #     selector = model.calibrated_classifiers_[0].estimator.named_steps['selector']
+    # estimator = model
 
+    # ===== Feature Importances =====
+    # log.info(f"Estimator: {estimator.estimator}")
+    feature_importances = get_feature_importance(estimator)
+    shaps = plot_shap_values(X_test, X_train, y_train, estimator, model_name, out_dir, False)
+    # shaps = None
+    select_features = False
     if select_features:
         feature_names = X_train.columns[selector.get_support()]
         with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
@@ -68,7 +78,7 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
 
     if feature_importances is not None:
         feature_importance = pd.DataFrame([feature_importances], columns=feature_names.values)
-        feature_importance.to_csv(f'{out_dir}/{y_test.name.replace(" ", "_")}/{model_name}_feature_importance.csv')
+        feature_importance.to_csv(f'{out_dir}/{model_name}_feature_importance.csv')
         plot_coefficients(out_dir, feature_importances, feature_names, model_name, y_test.name)
 
     #===== Decision Tree =====
@@ -82,4 +92,4 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
 
     interp_tpr = np.interp(thresholds, roc_plot.fpr, roc_plot.tpr, left=0.0)
 
-    return test_metrics, (interp_tpr, prc_plot.precision, prc_plot.recall)
+    return test_metrics, (interp_tpr, prc_plot.precision, prc_plot.recall), shaps
