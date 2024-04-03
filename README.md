@@ -1,4 +1,4 @@
-# CASS-PROPEL (Clinical ASSist AND aleRt Algorithms - Patient Risk/Outcome Prediction and EvaLuation)
+# CASS-PROPEL (Clinical ASSist - Patient Risk/Outcome Prediction and EvaLuation)
 
 **Complete evaluation of traditional "SK-learn like" machine learning models for post-operative complications**
 

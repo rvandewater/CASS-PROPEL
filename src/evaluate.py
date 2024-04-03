@@ -14,10 +14,12 @@ from src.test import test_classification_model
 from src.utils.metrics import all_classification_metrics_list, compute_classification_metrics
 from src.utils.plot import plot_val_mean_prec_rec, plot_val_mean_roc, plot_confusion_matrix, plot_shap_values
 
+
 def evaluate_single_cv_split(model, param_grid,
-                          X_train, y_train, X_test, y_test,
-                          cv_splits=5, cv_scoring='log_loss', select_features=False, shap_value_eval=False,
-                          cm_agg_type='sum', out_dir='results/default', sample_balancing=None, seed=42, search_method='random'):
+                             X_train, y_train, X_test, y_test,
+                             cv_splits=5, cv_scoring='log_loss', select_features=False, shap_value_eval=False,
+                             cm_agg_type='sum', out_dir='results/default', sample_balancing=None, seed=42,
+                             search_method='random'):
     os.makedirs(f'{out_dir}/val/', exist_ok=True)
     os.makedirs(f'{out_dir}/test/', exist_ok=True)
     model_name = str(model.__class__.__name__)
@@ -120,10 +122,13 @@ def evaluate_single_cv_split(model, param_grid,
     test_metrics, test_curves = test_classification_model(best_model, X_train, y_train, X_test, y_test,
                                                           model_name, select_features, out_dir)
     return cv_metrics, test_metrics, ((mean_tpr, overall_precision, overall_recall), test_curves)
+
+
 def evaluate_single_model(model, param_grid,
                           X_train, y_train, X_test, y_test,
-                          cv_splits=5, cv_scoring='average_precision', select_features=True, shap_value_eval=False,
-                          cm_agg_type='sum', out_dir='results/default', sample_balancing=None, seed=42, search_method='random'):
+                          cv_splits=5, cv_scoring='average_precision', select_features=False, shap_value_eval=False,
+                          cm_agg_type='sum', out_dir='results/default', sample_balancing=None, seed=42,
+                          search_method='random'):
     os.makedirs(f'{out_dir}/val/', exist_ok=True)
     os.makedirs(f'{out_dir}/test/', exist_ok=True)
     model_name = str(model.__class__.__name__)
@@ -205,8 +210,6 @@ def evaluate_single_model(model, param_grid,
         best_model = grid_model.fit(X_train, y_train)
     log.info("Fitted model")
 
-
-
     try:
         pass
     except ValueError as ve:
@@ -230,8 +233,9 @@ def evaluate_single_model(model, param_grid,
                                                                                      shap_value_eval, y_test, y_train)
     # =================== Final Model Testing ===============
     test_metrics, test_curves, shaps = test_classification_model(best_model, X_train, y_train, X_test, y_test,
-                                                          model_name, select_features, out_dir)
-    return cv_metrics, test_metrics, ((mean_tpr, overall_precision, overall_recall), test_curves), best_model, (shaps,list(X_test.index))
+                                                                 model_name, select_features, out_dir)
+    return cv_metrics, test_metrics, ((mean_tpr, overall_precision, overall_recall), test_curves), best_model, (
+    shaps, list(X_test.index))
 
 
 def independent_validation(X_test, X_train, all_metrics_list, best_model, cm_agg_type, cv, cv_splits, model_name, out_dir,
@@ -325,6 +329,7 @@ def independent_validation(X_test, X_train, all_metrics_list, best_model, cm_agg
         val_cm = val_cm / cv_splits
     plot_confusion_matrix(y_train.name, val_cm, model_name, out_dir, "val")
     cm_fig, ax = plt.subplots()
+
     cm_fig.suptitle(f'{model_name} predicting {y_test.name}')
     disp = ConfusionMatrixDisplay(confusion_matrix=val_cm,
                                   display_labels=[0, 1])

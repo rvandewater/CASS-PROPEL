@@ -56,7 +56,7 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
     feature_importances = get_feature_importance(estimator)
     shaps = plot_shap_values(X_test, X_train, y_train, estimator, model_name, out_dir, False)
 
-    if selector is not None:
+    if selector:
         feature_names = X_train.columns[selector.get_support()]
         with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
             f.write(f'selected features: {feature_names}\n')

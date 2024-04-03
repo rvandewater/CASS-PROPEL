@@ -16,8 +16,8 @@ import logging as log
 def common_preprocessing(data: Dataset,
                          imputer="knn",
                          normaliser='standard',
-                         missing_threshold=0.8,
-                         corr_threshold=0.95,
+                         missing_threshold=0,
+                         corr_threshold=0,
                          validation=False):
     """
     Preprocesses the data by applying one-hot-encoding to categorical features, imputing missing values and scaling
@@ -44,24 +44,19 @@ def common_preprocessing(data: Dataset,
         X = pd.concat([X, X_or], ignore_index=True)
         Y = pd.concat([Y, Y_or], ignore_index=True)
 
-    # row_missingness_tresh = int(len(X.columns)*0.50)
-    # col_missingness_tresh = int(len(X)*0.40)
-    # log.info(f"Shape of X: {X.shape}, dropping rows with missing values {row_missingness_tresh}, "
-    #          f"columns with missing values {col_missingness_tresh}")
-    # row_indices = X.dropna(thresh = row_missingness_tresh, axis = 0)
-    # X.dropna(thresh = col_missingness_tresh, axis = 1, inplace=True)
-    # log.info(f"Shape of X after dropping: {X.shape}")
-    # intersection = row_indices.index.intersection(X.index)
-    # Y = Y.loc[intersection]
+    # Drop rows with missing values
+    if missing_threshold > 0:
+        log.info(f"Shape of X: {X.shape}, dropping rows with missing values {missing_threshold}")
+        row_indices = X.dropna(thresh = missing_threshold, axis = 0)
+        X.dropna(thresh=int(len(X.columns) * missing_threshold), axis=0, inplace=True)
+        log.info(f"Shape of X after dropping: {X.shape}")
+        intersection = row_indices.index.intersection(X.index)
+        Y = Y.loc[intersection]
 
     log.debug("Categorical features:")
     log.debug(data.get_categorical_features())
     categorical_features = [col for col in X.columns if col in data.get_categorical_features()]
     X[categorical_features] = X[categorical_features].fillna(value=0)
-    # if "Vorbehandlung" in X.columns:
-    #     X["Vorbehandlung"] = X["Vorbehandlung"].astype("int")
-    # if "Histologie" in X.columns:
-    #     X["Histologie"] = X["Histologie"].astype("int")
 
     # One-hot-encode categorical features
     X = pd.get_dummies(X, columns=categorical_features, dummy_na=False, dtype="float64")
@@ -78,8 +73,8 @@ def common_preprocessing(data: Dataset,
     #         fs.identify_collinear(X, correlation_threshold=correlation_threshold)
     #         log.info(fs.removal_ops['collinear'])
     #     X = fs.remove(X, fs_operations, one_hot=False)
-
-    # X = drop_correlated(X, corr_threshold)
+    if corr_threshold > 0:
+        X = drop_correlated(X, corr_threshold)
 
     # Fix strings in Binary columns
     for binary_col in data.get_binary_features():
@@ -87,7 +82,6 @@ def common_preprocessing(data: Dataset,
             unique_vals = list(np.unique(X[binary_col].values))
             if len(unique_vals) < 2:
                 warnings.warn(f"Binary column {binary_col} has less than 2 unique values.", UserWarning)
-                # raise AssertionError(f"Binary column {binary_col} has less than 2 unique values.")
             if len(unique_vals) != 1 and unique_vals != [0, 1]:
                 log.debug(f'Renaming entries from {binary_col}: {unique_vals[0]} -> 0; {unique_vals[1]} -> 1')
                 X[binary_col].replace({unique_vals[0]: 0,
@@ -101,9 +95,6 @@ def common_preprocessing(data: Dataset,
     # Interpolate numerical features
     if imputer is not None:
         log.info(f'Running {imputer} imputer...')
-        # Unstable, so pro
-        # if imputer == 'iterative':
-        #     imputer = IterativeImputer(max_iter=1000)
         if imputer == 'knn':
             imputer = KNNImputer(n_neighbors=5, weights='uniform')
         elif imputer in ['mean', 'median']:
@@ -140,8 +131,6 @@ def common_preprocessing(data: Dataset,
         X = X.head(validation_samples)
         Y = Y.head(validation_samples)
         Y = Y.fillna(value=0)
-
-
 
     log.info(f'Class distributions for {len(Y)} data points, validation={validation}:')
     for y_col in Y:

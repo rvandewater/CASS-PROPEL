@@ -23,7 +23,7 @@ def get_parser():
                         help='output directory')
     parser.add_argument('--no_features_dropped', '-nfd', action='store_false', dest='drop_features',
                         help='deactivates dropping predefined features in dataframe')
-    parser.add_argument('--no_feature_selection', '-nfs', action='store_false', dest='select_features',
+    parser.add_argument('--feature_selection', '-nfs', type=bool, dest='select_features', default=False,
                         help='deactivates feature selection in pipeline')
     parser.add_argument('--cv_splits', '-cv', type=int, default=5,
                         help='number of cross_validation splits; 1 denotes LOO-CV')
@@ -36,9 +36,9 @@ def get_parser():
                         help='Artificial oversampling option.')
     parser.add_argument('--drop_missing_value', '-dr', type=float, default=0,
                         help='Drop rows with x% of columns having missing values')
-    parser.add_argument('--missing_threshold', '-mt', type=float, default=0.5,
+    parser.add_argument('--missing_threshold', '-mt', type=float, default=0,
                         help='Threshold for dropping columns with missing values')
-    parser.add_argument('--correlation_threshold', '-ct', type=float, default=0.95,
+    parser.add_argument('--correlation_threshold', '-ct', type=float, default=0,
                         help='Threshold for dropping columns with high correlation')
     parser.add_argument('--data_exploration', '-ex', nargs='*', type=bool, default=False,
                         help='If true, an html file will be generated showing statistics of the parsed dataset')
