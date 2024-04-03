@@ -1,6 +1,6 @@
 import pandas as pd
 from src.utils.plot import data_exploration_comparison, data_exploration
-
+import logging as log
 
 class Dataset:
     def __init__(self,
@@ -205,16 +205,16 @@ class Dataset:
         # Assert the length of the intersection
         assert len(
             set(original_data.columns).intersection(set(self.get_all_features() + self.get_all_endpoints()))) == len(
-            set(original_data.columns)), \
-            [col for col in original_data.columns if col not in set(original_data.columns).intersection(
-                set(self.get_all_features() + self.get_all_endpoints()))]
+            set(original_data.columns)), "Column set doesn't match: " + \
+            str([col for col in original_data.columns if col not in set(original_data.columns).intersection(
+                set(self.get_all_features() + self.get_all_endpoints()))])
 
         drop_columns_list = []
         # Drop the columns that are not in the validation data
         if external_validation_data is not None:
             drop_columns_list.extend(set(original_data.columns).difference(set(external_validation_data.columns)))
 
-        print(drop_columns_list)
+        log.debug(f"Drop columns:{drop_columns_list}")
 
         if feature_set is not None:
             drop_columns_list.extend(list(self.data_infos.loc[
@@ -224,10 +224,10 @@ class Dataset:
         if drop_columns:
             drop_columns_list.extend(list(self.data_infos.loc[self.data_infos['drop'], 'column_name']))
             # Remove the updated values from esophagus_info_updated
-            print(list(set(self.data_infos.column_name.values).difference(set(original_data.columns.values))))
+            log.debug(f"Column difference: {list(set(self.data_infos.column_name.values).difference(set(original_data.columns.values)))}")
             difference = list(set(self.data_infos.column_name.values).difference(set(original_data.columns.values)))
             self.data_infos = self.data_infos[~self.data_infos["column_name"].isin(difference)]
-        original_data.drop(columns=drop_columns_list, inplace=True)
+        original_data.drop(columns=drop_columns_list, inplace=True, errors='ignore')
 
         if drop_missing_value > 0:
             # Calculate the minimum amount of columns that have to contain a value

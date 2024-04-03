@@ -1,17 +1,22 @@
+import json
+
 import numpy as np
 import seaborn as sns
 import shap
 from matplotlib import pyplot as plt
 from sklearn.calibration import CalibrationDisplay
-from sklearn.metrics import auc, precision_recall_curve, average_precision_score, plot_roc_curve, plot_precision_recall_curve, \
-    ConfusionMatrixDisplay, PrecisionRecallDisplay
+from sklearn.metrics import auc, precision_recall_curve, average_precision_score, roc_curve, \
+    ConfusionMatrixDisplay, PrecisionRecallDisplay, RocCurveDisplay
 from sweetviz import compare, analyze
 import os.path as pth
 import warnings
-#001C7F, #D62728, #017517, #8C0900, #7600A1, #B8860B, #FF7F0E
+import logging as log
+import pickle
+# 001C7F, #D62728, #017517, #8C0900, #7600A1, #B8860B, #FF7F0E
 dpi = 300
 colors = ['#001C7F', '#D62728', '#017517', '#8C0900', '#7600A1', '#B8860B', '#FF7F0E']
 
+style = 'seaborn-v0_8-colorblind'
 
 model_name_replacements = {
     'DecisionTreeClassifier': 'Decision tree',
@@ -22,6 +27,8 @@ model_name_replacements = {
     'SVC': 'SVM',
     'MLPClassifier': 'Neural network',
 }
+
+output_format = "pdf"
 
 
 def boxplot(out_dir, data, metric_name, y_label, ymin=0, ymax=1):
@@ -59,11 +66,12 @@ def boxplot(out_dir, data, metric_name, y_label, ymin=0, ymax=1):
     plt.scatter(range(1, len(model_names) + 1), test_data, marker='o', color='blue')
 
     # Format axes etc
-    ax.set_xticklabels([model_name_replacements.get(model_name, model_name) for model_name in model_names], rotation=45, ha='right')
+    ax.set_xticklabels([model_name_replacements.get(model_name, model_name) for model_name in model_names], rotation=45,
+                       ha='right')
     ax.set_ylim(ymin, ymax)
     ax.set_ylabel(metric_name)
     plt.tight_layout()
-    plt.savefig(f'{out_dir}/{y_label.replace(" ", "_")}/all_models_{metric_name}', dpi=dpi)
+    plt.savefig(f'{out_dir}/all_models_{metric_name}.{output_format}', dpi=dpi, format=output_format)
     plt.close()
 
 
@@ -87,11 +95,12 @@ def plot_coefficients(out_dir, coefs, feature_names, model_name, label_name, top
     plt.bar(np.arange(len(coefs)), coefs, color=colors)
     plt.xticks(np.arange(len(coefs)), feature_names, rotation=60, ha='right')
     plt.tight_layout()
-    plt.savefig(f'{out_dir}/{label_name.replace(" ", "_")}/test/{model_name}_feature_importance', dpi=dpi)
+    plt.savefig(f'{out_dir}/test/{model_name}_feature_importance.{output_format}', dpi=dpi, format=output_format)
     plt.close()
 
 
-def plot_summary_roc(all_model_metrics, out_dir, label_col, dataset_partition='val', title=None, legend=False, value_in_legend=True):
+def plot_summary_roc(all_model_metrics, out_dir, label_col, dataset_partition='val', title=None, legend=False,
+                     value_in_legend=True):
     """
     Plot ROC curves for all models in one figure.
     Parameters
@@ -110,7 +119,7 @@ def plot_summary_roc(all_model_metrics, out_dir, label_col, dataset_partition='v
         ds_index = 1
 
     plt.rcParams['font.family'] = "Arial"
-    plt.style.use('seaborn-notebook')
+    plt.style.use(style)
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.set_aspect('equal')
     if title:
@@ -139,12 +148,13 @@ def plot_summary_roc(all_model_metrics, out_dir, label_col, dataset_partition='v
     plt.ylabel('True Positive Rate', fontsize=18)
     ax.tick_params(axis='both', which='major', labelsize=12)
     ax.tick_params(axis='both', which='minor', labelsize=12)
-    plt.savefig(f'{out_dir}/{label_col}/all_models_{dataset_partition}_roc_curves'.replace(' ', '_'),
-                bbox_inches='tight', dpi=dpi)
+    plt.savefig(f'{out_dir}/all_models_{dataset_partition}_roc_curves.{output_format}'.replace(' ', '_'),
+                bbox_inches='tight', dpi=dpi, format=output_format)
     plt.close()
 
 
-def plot_summary_prc(all_model_metrics, out_dir, label_col, y, dataset_partition='val', title=None, legend=False, value_in_legend=True):
+def plot_summary_prc(all_model_metrics, out_dir, label_col, y, dataset_partition='val', title=None, legend=False,
+                     value_in_legend=True):
     """
     Plot PRC curves for all models in one figure.
     Parameters
@@ -164,7 +174,7 @@ def plot_summary_prc(all_model_metrics, out_dir, label_col, y, dataset_partition
         ds_index = 1
 
     plt.rcParams['font.family'] = "Arial"
-    plt.style.use('seaborn-notebook')
+    plt.style.use(style)
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.set_aspect('equal')
     if title:
@@ -192,8 +202,8 @@ def plot_summary_prc(all_model_metrics, out_dir, label_col, y, dataset_partition
     ax.tick_params(axis='both', which='minor', labelsize=12)
     if legend:
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15))
-    plt.savefig(f'{out_dir}/{label_col}/all_models_{dataset_partition}_prc_curves'.replace(' ', '_'),
-                bbox_inches='tight', dpi=dpi)
+    plt.savefig(f'{out_dir}/all_models_{dataset_partition}_prc_curves.{output_format}'.replace(' ', '_'),
+                bbox_inches='tight', dpi=dpi, format=output_format)
     plt.close()
 
 
@@ -235,8 +245,8 @@ def plot_summary_roc_pr(all_model_metrics, out_dir, label_col, y):
     ax2.set(xlim=[-0.05, 1.05], ylim=[0.0, 1.05],
             title='Precision-Recall')
     ax2.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15))
-    plt.savefig(f'{out_dir}/{label_col}/all_models_roc_prc_curves'.replace(' ', '_'),
-                bbox_inches='tight', dpi=dpi)
+    plt.savefig(f'{out_dir}/all_models_roc_prc_curves.{output_format}'.replace(' ', '_'),
+                bbox_inches='tight', dpi=dpi, format=output_format)
     plt.close()
 
 
@@ -300,7 +310,7 @@ def data_exploration(data, endpoint, file_path):
                                  scale=None)
 
 
-def plot_roc_pr_curve(X_test, y_test, endpoint, model, model_name, out_dir):
+def plot_roc_pr_curve(X_test, y_test, endpoint, model, model_name, out_dir, editable=True):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
     ax1.set_aspect('equal')
     ax2.set_aspect('equal')
@@ -308,28 +318,46 @@ def plot_roc_pr_curve(X_test, y_test, endpoint, model, model_name, out_dir):
     ax2.set(xlim=[-0.05, 1.05], ylim=[0.0, 1.05])
     fig.suptitle(f'{model_name} predicting {endpoint}')
     # ROC
-    roc_plot = plot_roc_curve(model, X_test, y_test,
-                              name='ROC curve', lw=1, ax=ax1)
+    roc_plot = RocCurveDisplay.from_estimator(model, X_test, y_test, name='ROC curve', lw=1, ax=ax1)
     ax2.set(xlim=[-0.05, 1.05], ylim=[0.0, 1.05])
     prc_plot = PrecisionRecallDisplay.from_estimator(model, X_test, y_test,
                                                      name='PR curve', lw=1, ax=ax2)
-    plt.savefig(f'{out_dir}/{endpoint}/test/{model_name}_roc_prc_curves'.replace(' ', '_'), bbox_inches='tight', dpi=dpi)
+    plt.savefig(f'{out_dir}/test/{model_name}_roc_prc_curves.{output_format}'.replace(' ', '_'), bbox_inches='tight', dpi=dpi, format=output_format)
+
+    if editable:
+        save_editable_plot(f'{out_dir}/test/{model_name}_roc_prc_curves')
+    plt.close()
 
     return roc_plot, prc_plot
 
 
 def plot_confusion_matrix(label, confusion_matrix, model_name, out_dir, phase):
     cm_fig, ax = plt.subplots()
+    output_format='png'
     cm_fig.suptitle(f'{model_name} predicting {label}')
     disp = ConfusionMatrixDisplay(confusion_matrix=confusion_matrix,
                                   display_labels=[0, 1])
     disp.plot(include_values=True, cmap='Blues', ax=ax,
               xticks_rotation='horizontal', values_format='d')
-    plt.savefig(f'{out_dir}/{label}/{phase}/{model_name}_cm'.replace(' ', '_'))
+    plt.savefig(f'{out_dir}/{phase}/{model_name}_cm.{output_format}'.replace(' ', '_'), format=output_format)
     plt.close()
 
 
-def plot_shap_values(X_test, X_train, y_train, cv, model, model_name, out_dir, select_features):
+def plot_shap_values(X_test, X_train, y_train, model, model_name, out_dir, select_features):
+    """
+    Plot SHAP values for the test set and save graph to the output directory. Returns compute shap values for the test set.
+    Args:
+        X_test:
+        X_train:
+        y_train:
+        model:
+        model_name:
+        out_dir:
+        select_features:
+
+    Returns:
+
+    """
     def get_shap_values(test_data, train_data):
         if select_features:
             train_data = model.named_steps['selector'].transform(train_data)
@@ -337,15 +365,18 @@ def plot_shap_values(X_test, X_train, y_train, cv, model, model_name, out_dir, s
 
         # Get SHAP values function
         if model_name == 'LogisticRegression':
-            explainer = shap.LinearExplainer(model.named_steps['model'], train_data)
-        elif model_name in ['DecisionTreeClassifier', 'RandomForestClassifier', 'GradientBoostingClassifier']:
-            explainer = shap.TreeExplainer(model.named_steps['model'], train_data)
+            explainer = shap.LinearExplainer(model, train_data)#(model.named_steps['model'], train_data)
+        elif model_name in ['DecisionTreeClassifier', 'RandomForestClassifier', 'GradientBoostingClassifier', 'XGBClassifier']:
+            # explainer = shap.TreeExplainer(model.named_steps['model'], train_data)
+            explainer = shap.TreeExplainer(model, train_data=train_data, check_additivity=False)
         else:
             if hasattr(model, "predict_proba"):
                 f = lambda x: model.predict_proba(x)[:, 1]
                 explainer = shap.KernelExplainer(f, train_data)
             else:
                 explainer = shap.KernelExplainer(model.decision_function, train_data)
+        log.debug(f"Explainer: {test_data.shape} {train_data.shape}")
+        log.debug(f"Explainer: {test_data.head()}")
         return explainer.shap_values(test_data)
 
     with warnings.catch_warnings():
@@ -355,46 +386,77 @@ def plot_shap_values(X_test, X_train, y_train, cv, model, model_name, out_dir, s
         test_shap_values = get_shap_values(X_test, X_train)
         shap.summary_plot(test_shap_values, X_test, show=False)
         plt.tight_layout()
-        plt.savefig(f'{out_dir}/{y_train.name}/test/{model_name}_SHAP.png'.replace(' ', '_'), dpi=dpi)
+        plt.savefig(f'{out_dir}/{model_name}_SHAP.{output_format}'.replace(' ', '_'), dpi=dpi, format=output_format)
         plt.close()
 
         shap.summary_plot(test_shap_values, X_test, plot_type='bar', show=False)
         plt.tight_layout()
-        plt.savefig(f'{out_dir}/{y_train.name}/test/{model_name}_SHAP_bars.png'.replace(' ', '_'), dpi=dpi)
+        plt.savefig(f'{out_dir}/{model_name}_SHAP_bars.{output_format}'.replace(' ', '_'), dpi=dpi, format=output_format)
         plt.close()
-
+        log.info(f"SHAP values for {model_name} predicting {y_train.name} saved to {out_dir}")
+        return test_shap_values
         # CV SHAP values
-        shap_values_list = []
-        test_ixs = []
-        for train_ix, test_ix in cv.split(X_train, y_train):
-            test_ixs.append(test_ix)
-
-            X_tr = X_train.iloc[train_ix]
-            y_tr = y_train.iloc[train_ix]
-            X_te = X_train.iloc[test_ix]
-            model.fit(X_tr, y_tr)
-            shap_values = get_shap_values(X_te, X_tr)
-            for shap_value in shap_values:
-                shap_values_list.append(shap_value)
-
-        new_index = [ix for ix_test_fold in test_ixs for ix in ix_test_fold]
-        shap.summary_plot(np.array(shap_values_list), X_train.reindex(new_index), show=False)
-        plt.tight_layout()
-        plt.savefig(f'{out_dir}/{y_train.name}/val/{model_name}_SHAP.png'.replace(' ', '_'), dpi=dpi)
-        plt.close()
-
-        shap.summary_plot(np.array(shap_values_list), X_train.reindex(new_index), plot_type='bar', show=False)
-        plt.tight_layout()
-        plt.savefig(f'{out_dir}/{y_train.name}/val/{model_name}_SHAP_bars.png'.replace(' ', '_'), dpi=dpi)
-        plt.close()
+        # shap_values_list = []
+        # test_ixs = []
+        # for train_ix, test_ix in cv.split(X_train, y_train):
+        #     test_ixs.append(test_ix)
+        #
+        #     X_tr = X_train.iloc[train_ix]
+        #     y_tr = y_train.iloc[train_ix]
+        #     X_te = X_train.iloc[test_ix]
+        #     model.fit(X_tr, y_tr)
+        #     shap_values = get_shap_values(X_te, X_tr)
+        #     for shap_value in shap_values:
+        #         shap_values_list.append(shap_value)
+        #
+        # new_index = [ix for ix_test_fold in test_ixs for ix in ix_test_fold]
+        # shap.summary_plot(np.array(shap_values_list), X_train.reindex(new_index), show=False)
+        # plt.tight_layout()
+        # plt.savefig(f'{out_dir}/{y_train.name}/val/{model_name}_SHAP.{output_format}'.replace(' ', '_'), dpi=dpi, format=output_format)
+        # plt.close()
+        #
+        # shap.summary_plot(np.array(shap_values_list), X_train.reindex(new_index), plot_type='bar', show=False)
+        # plt.tight_layout()
+        # plt.savefig(f'{out_dir}/{y_train.name}/val/{model_name}_SHAP_bars.{output_format}'.replace(' ', '_'), dpi=dpi, format=output_format)
+        # plt.close()
 
 
 def plot_calibration_curves(X_test, y_test, endpoint, model, model_name, out_dir):
     sns.set(style='darkgrid', context='talk', palette='rainbow')
     fig, ax = plt.subplots()
     fig.suptitle(f'{model_name} predicting {endpoint}')
-    viz = CalibrationDisplay.from_estimator(model, X_test, y_test, n_bins=10, name=model_name, ax=ax)
+    CalibrationDisplay.from_estimator(model, X_test, y_test, n_bins=10, name=model_name, ax=ax)
     plt.tight_layout()
-    plt.savefig(f'{out_dir}/{endpoint}/test/{model_name}_calibration'.replace(' ', '_'), dpi=dpi)
+    plt.savefig(f'{out_dir}/test/{model_name}_calibration.{output_format}'.replace(' ', '_'), dpi=dpi, format=output_format)
     plt.close()
     sns.reset_orig()
+
+def save_editable_plot(name):
+    with open(f'{name}.pickle', 'wb') as f:
+        pickle.dump(plt.gcf(), f)
+
+
+def generate_summary_plots(all_model_metrics, label_col, model, out_dir, y):
+    # Generate Boxplots for Metrics
+    json_metric_data = {}
+    for metric_name in all_model_metrics[str(model.__class__.__name__)][0].keys():
+        if metric_name == 'confusion_matrix':
+            json_metric_data[metric_name] = {
+                model_name: ([cv_cm.tolist() for cv_cm in val_metrics[metric_name]], test_metrics[metric_name].tolist())
+                for model_name, (val_metrics, test_metrics, _) in all_model_metrics.items()}
+            continue
+        metric_data = {model_name: (val_metrics[metric_name], test_metrics[metric_name])
+                       for model_name, (val_metrics, test_metrics, _) in all_model_metrics.items()}
+        json_metric_data[metric_name] = metric_data
+        boxplot(out_dir, metric_data, metric_name, label_col, ymin=(-1 if metric_name == 'mcc' else 0))
+    json.dump(json_metric_data, open(f'{out_dir}/{label_col}/all_model_metrics.json', 'w'), indent=4)
+    # Plot roc pr for all models
+    plot_summary_roc(all_model_metrics, out_dir, label_col, dataset_partition='val', legend=True,
+                     value_in_legend=False)
+    plot_summary_roc(all_model_metrics, out_dir, label_col, dataset_partition='test', legend=True,
+                     value_in_legend=False)
+    plot_summary_prc(all_model_metrics, out_dir, label_col, y, dataset_partition='val', legend=True,
+                     value_in_legend=False)
+    plot_summary_prc(all_model_metrics, out_dir, label_col, y, dataset_partition='test', legend=True,
+                     value_in_legend=False)
+    plot_summary_roc_pr(all_model_metrics, out_dir, label_col, y)

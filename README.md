@@ -1,12 +1,16 @@
-# PROPEL (Patient Risk/Outcome Prediction and EvaLuation)
+# CASS-PROPEL (Clinical ASSist AND aleRt Algorithms - Patient Risk/Outcome Prediction and EvaLuation)
 
-**Complete evaluation of traditional machine learning models available from scikit-learn for the prediction of post-operative complications**
+**Complete evaluation of traditional "SK-learn like" machine learning models for post-operative complications**
 
 This repository serves to evaluate the performance of traditional machine learning models available from [Scikit-learn](https://github.com/scikit-learn/scikit-learn) 
 for the prediction of post-operative complications. Although the focus is on the prediction of post-operative 
 complications, the code can be used and adjusted for other use cases.
 
 The code was used to generate the results for the following papers:
+* R. van de Water et al., ‘Combining Hospital-grade Clinical Data and Wearable Vital Sign Monitoring to Predict Surgical Complications’, presented at the ICLR 2024 Workshop on Learning from Time Series For Health, Mar. 2024. Accessed: Apr. 03, 2024. [Online]. Available: https://openreview.net/forum?id=EzNGSRPGa7
+* R. van de Water et al., ‘Combining Time Series Modalities to Create Endpoint-driven Patient Records’, presented at the ICLR 2024 Workshop on Data-centric Machine Learning Research (DMLR): Harnessing Momentum for Science, Mar. 2024. Accessed: Apr. 03, 2024. [Online]. Available: https://openreview.net/forum?id=0NZOSSBZCi
+
+An older version of the code (https://github.com/HPI-CH/PROPEL) was used to generate the results for the following papers:
 * [Pfitzner, B., Chromik, J., Brabender, R., Fischer, E., Kromer, A., Winter, A., Moosburner, S., Sauer, I. M., Malinka, T., Pratschke, J., Arnrich, B., & Maurer, M. M. (2021). Perioperative Risk Assessment in Pancreatic Surgery Using Machine Learning. Annual International Conference of the IEEE Engineering in Medicine and Biology Society. IEEE Engineering in Medicine and Biology Society. Annual International Conference, 2021, 2211–2214. https://doi.org/10.1109/EMBC46164.2021.9630897](https://doi.org/10.1109/EMBC46164.2021.9630897)
 * (UNDER REVIEW) Winter, A., van de Water, R., Pfitzner, B., Riepe, C., Ahlborn, R., Faraj, L., Krenzien, F., Dobrindt, E., Raakow, J., Sauer, I., Arnrich, B., Beyer, K., Denecke, C., Pratschke, J., Maurer, M. (2023). Advancing Preoperative Outcome Prediction: A Comparative Analysis of Machine Learning and ISEG Risk Score for Predicting 90-Day Mortality after Esophagectomy
 ________

@@ -426,7 +426,7 @@ class FeatureSelector:
         data = data.drop(columns=features_to_drop)
         self.removed_features = features_to_drop
 
-        print('Removed %d features' % len(features_to_drop))
+        print('Removed %d features (%s)' % (len(features_to_drop), str(features_to_drop)))
         return data
 
     def plot_missing(self):
