@@ -1,12 +1,16 @@
 import os
 import json
+import pickle
 import time
 import random
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
+import shap
+from matplotlib import pyplot as plt
+from sklearn.model_selection import train_test_split, StratifiedShuffleSplit, StratifiedKFold, RandomizedSearchCV
+from sklearn.pipeline import Pipeline
 
 from src.data import get_data_from_name
 from src.preprocess import common_preprocessing
@@ -21,36 +25,40 @@ bars = '====================='
 
 
 def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer, normaliser, drop_features,
-               select_features, cv_splits, shap_eval, test_fraction, balancing_option, drop_missing_value, data_exploration,
-               missing_threshold, correlation_threshold, cores):
+               select_features, cv_splits, shap_eval, test_fraction, artificial_balancing_option, drop_missing_value,
+               data_exploration, missing_threshold, correlation_threshold, cores=1, offset=12):
     """
     Main function for evaluation of classical ML models on post-operative complications dataset.
 
     Args:
-        seed:
-        out_dir:
-        dataset:
-        feature_set:
-        external_test_data:
-        imputer:
-        normaliser:
-        drop_features:
-        select_features:
-        cv_splits:
-        shap_eval:
-        test_fraction:
-        balancing_option:
-        drop_missing_value:
-        data_exploration:
-        missing_threshold:
-        correlation_threshold:
-        cores:
+        seeds: Seeds to use for reproducibility
+        out_dir: Output directory
+        dataset: The dataset to process
+        feature_set: If given, processes only features from all provided feature sets
+        external_test_data: Use external validation dataset
+        imputer: Imputer to use for missing values
+        normaliser: Normalise features
+        drop_features: Whether to drop predefined features
+        select_features: Whether to perform feature selection
+        cv_splits: Number of cross_validation splits; 1 denotes LOO-CV
+        shap_eval: Turn on SHAP evaluation (Warning: Increases runtime)
+        test_fraction: Size of the test set in fraction of total samples
+        artificial_balancing_option: Artificial oversampling option
+        drop_missing_value: Drop rows missing this percentage of columns
+        data_exploration: Generate data exploration plots
+        missing_threshold: Missing threshold for removing features in preprocessing
+        correlation_threshold: Correlation threshold for removing features in preprocessing
+        cores: Amount of cores to use for parallel processing
+        offset: Temporal offset for dataset if applicable
     """
-    cores = 1
-    out_dir = setup_output_directory(dataset, feature_set, out_dir)
+    out_dir, start_time = setup_output_directory(dataset, feature_set, out_dir, offset=offset)
 
+    log.debug(f"Arguments: {locals()}")
     # Get DataInformation object for the specified task
-    data = get_data_from_name(dataset)
+    data = get_data_from_name(dataset, offset)
+
+    if external_test_data:
+        log.info(f"Using external test data from {data.validation_data_path}")
 
     # Parse data
     data.parse(drop_columns=drop_features, feature_set=feature_set, drop_missing_value=drop_missing_value,
@@ -60,6 +68,7 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
     X, Y = common_preprocessing(data, imputer=imputer, normaliser=normaliser, validation=False,
                                 missing_threshold=missing_threshold, corr_threshold=correlation_threshold)
     log.info(f"{bars} Preprocessing complete {bars}")
+    log.info(list(X.columns))
 
     # Preprocess external validation data
     if external_test_data:
@@ -72,27 +81,41 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
             X_val.columns)) == 0, (f'Error: Train data includes columns {X.columns.difference(X_val.columns)} that are '
                                    f'missing in val data')
 
-
-
     with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
         f.write(f'\n {bars} New Trial at {time.strftime("%d.%m.%Y %H:%M:%S")} {bars} \n')
         f.write(str(locals()))
         f.write('\n')
-    seeds = [111, 222, 333, 444, 555, 666, 777, 888, 999]
-    # seeds = [111,222]
-    all_metrics_list = all_classification_metrics_list
 
+    all_metrics_list = all_classification_metrics_list
     # For each endpoint
-    all_model_metrics = pd.DataFrame(columns=["endpoint", "seed", "model", "validation", "test", "curves"])
+    all_model_metrics = pd.DataFrame(
+        columns=["endpoint", "seed", "model", "fold", "validation", "test", "curves", "best_model", "shaps"])
+    log.info(f"Seeds: {seeds}")
+    # Iterate over endpoints
     for k, endpoint in enumerate(Y.columns):
+        # all_model_metrics = pd.DataFrame(columns=["endpoint", "seed", "model", "fold", "validation", "test", "curves", "best_model", "shaps"])
         # For each endpoint, we create dictionary for each seed
         # all_model_metrics[endpoint] = {seed: {} for seed in seeds}
         out_dir_endpoint = f'{out_dir}/{endpoint.replace(" ", "_")}'
-
         log.info(f'Predicting {endpoint}')
         # Set endpoint for iteration
         y = Y[endpoint]
-
+        # pretune = True
+        # # # The amount of independent trails we want to do
+        #
+        # if pretune:
+        #     model_scores = {}
+        #     model_params = {}
+        #     for seed in seeds:
+        #         model_grid = get_classification_model_grid('balanced' if artificial_balancing_option == 'class_weight' else None, seed=seed)
+        #         grid_model = pre_tune(X, y, model_grid[0])
+        #         # grid_model.best_model.score(X,y)
+        #         model_scores[seed] = grid_model.best_score_
+        #         model_params[seed] = grid_model
+        #     log.info(model_scores)
+        #     pretune_model = max(model_scores)
+        #     pretune_model = model_params[pretune_model]
+        # model_scores = {111: ({'n_estimators': 750, 'min_child_weight': 0.5, 'max_depth': 3, 'learning_rate': 0.005, 'colsample_bytree': 0.1}, 0.4165744284536581), 222: ({'n_estimators': 100, 'min_child_weight': 0.5, 'max_depth': 3, 'learning_rate': 0.1, 'colsample_bytree': 1.0}, 0.40532207472238657), 333: ({'n_estimators': 50, 'min_child_weight': 0.5, 'max_depth': 3, 'learning_rate': 0.1, 'colsample_bytree': 0.5}, 0.405838096897264), 444: ({'n_estimators': 250, 'min_child_weight': 0.5, 'max_depth': 3, 'learning_rate': 0.1, 'colsample_bytree': 0.1}, 0.4085006083226691), 555: ({'n_estimators': 500, 'min_child_weight': 0.5, 'max_depth': 3, 'learning_rate': 0.1, 'colsample_bytree': 0.25}, 0.3923515498500847), 666: ({'n_estimators': 500, 'min_child_weight': 0.5, 'max_depth': 5, 'learning_rate': 0.1, 'colsample_bytree': 0.5}, 0.39398412387226495), 777: ({'n_estimators': 750, 'min_child_weight': 0.5, 'max_depth': 3, 'learning_rate': 0.1, 'colsample_bytree': 1.0}, 0.3968773189038742), 888: ({'n_estimators': 500, 'min_child_weight': 0.5, 'max_depth': 5, 'learning_rate': 0.01, 'colsample_bytree': 0.25}, 0.42302872919384454), 999: ({'n_estimators': 100, 'min_child_weight': 0.5, 'max_depth': 5, 'learning_rate': 0.1, 'colsample_bytree': 1.0}, 0.41035040320598526)}
         for seed in seeds:
             # all_test_metric_dfs[seed] = {metric: pd.DataFrame(dtype=np.float64) for metric in all_metrics_list if
             #                        metric != 'confusion_matrix'}
@@ -103,61 +126,93 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
             seed = seed
             np.random.seed(seed)
             random.seed(seed)
-            with open(f'{out_dir_seed}/best_parameters.txt', 'a+') as f:
-                f.write(f'=====\n{endpoint}\n=====')
+            # with open(f'{out_dir_seed}/best_parameters.txt', 'a+') as f:
+            #     f.write(f'=====\n{endpoint}\n=====')
 
             log.info(Y.info())
+            # cv_splits = 3
+            nested_cv = False
 
-            # If we do not have an external validation dataset, we split the original dataset
-            if not external_test_data:
-                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_fraction,
-                                                                    random_state=seed, shuffle=True, stratify=y)
+            if nested_cv:
+                # log.info(f"Using pretuned model: {pretune_model}")
+                model = nested_crossval(X, all_model_metrics, artificial_balancing_option, cv_splits, endpoint, out_dir_seed,
+                                        seed,
+                                        select_features, shap_eval, y)  # , pretune_model=pretune_model.best_estimator_)
             else:
-                # Set endpoint for iteration
-                y_val = Y_val[endpoint]
+                # If we do not have an external validation dataset, we split the original dataset
+                if not external_test_data:
+                    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_fraction,
+                                                                        random_state=seed, shuffle=True, stratify=y)
+                else:
+                    # Set endpoint for iteration
+                    y_val = Y_val[endpoint]
 
-                # Set train and test
-                X_train = X
-                y_train = y
-                X_test = X_val
-                y_test = y_val
+                    # Set train and test
+                    X_train = X
+                    y_train = y
+                    X_test = X_val
+                    y_test = y_val
 
-            # Feature selection for each endpoint only on training data
-            # X_test, X_train = model_feature_selection(X_test, X_train, y_train, min_feature_fraction=0.5, cores=cores,
-            #                                           scoring=make_scorer(average_precision_score))
+                # Feature selection for each endpoint only on training data
+                # X_test, X_train = model_feature_selection(X_test, X_train, y_train, min_feature_fraction=0.5, cores=cores,
+                #                                           scoring=make_scorer(average_precision_score))
 
-            # model grid
-            model_grid = get_classification_model_grid('balanced' if balancing_option == 'class_weight' else None, seed=seed)
-            for j, (model, param_grid) in enumerate(model_grid):
-                val_metrics, test_metrics, curves = evaluate_single_model(model, param_grid,
-                                                                          X_train, y_train, X_test, y_test,
-                                                                          cv_splits=cv_splits,
-                                                                          select_features=select_features,
-                                                                          shap_value_eval=shap_eval,
-                                                                          out_dir=out_dir_seed,
-                                                                          sample_balancing=balancing_option,
-                                                                          seed=seed)
-                model_label = str(model.__class__.__name__)
-                # all_model_metrics[endpoint][seed][model_label]= {"validation":val_metrics, "test": test_metrics, "curves": curves}
-                all_model_metrics.loc[len(all_model_metrics.index)]= [endpoint, seed, model_label,val_metrics, test_metrics, curves]
+                # model grid
+                # model_grid = get_classification_model_grid('balanced' if artificial_balancing_option == 'class_weight' else None, seed=seed)
+                model_grid = get_classification_model_grid(
+                    'balanced' if artificial_balancing_option == 'class_weight' else None, seed=seed)
 
+                for j, (model, param_grid) in enumerate(model_grid):
+                    val_metrics, test_metrics, curves, best_model, shaps = evaluate_single_model(model, param_grid,
+                                                                                                 X_train, y_train, X_test,
+                                                                                                 y_test,
+                                                                                                 cv_splits=cv_splits,
+                                                                                                 select_features=select_features,
+                                                                                                 shap_value_eval=shap_eval,
+                                                                                                 out_dir=out_dir_seed,
+                                                                                                 sample_balancing=artificial_balancing_option,
+                                                                                                 seed=seed)
 
-            if (len(model_grid) > 1):
-                # Save summary plots across models
-                generate_summary_plots(all_model_metrics, endpoint, model, out_dir_seed, y)
+                    model_label = str(model.__class__.__name__)
+                    # all_model_metrics[endpoint][seed][model_label]= {"validation":val_metrics, "test": test_metrics, "curves": curves}
+                    # 0 for fold name
+                    all_model_metrics.loc[len(all_model_metrics.index)] = [endpoint, seed, model_label, 0, val_metrics,
+                                                                           test_metrics, curves, best_model, shaps]
+                    # all_model_metrics.loc[len(all_model_metrics.index)] = [endpoint, seed, model_label, fold_iter, val_metrics,
+                    #                                                        test_metrics, curves, best_model, shaps]
 
+                # if (len(model_grid) > 1):
+                #     # Save summary plots across models
+                #     generate_summary_plots(all_model_metrics, endpoint, model, out_dir_seed, y)
+                # pickle.dump(all_model_metrics, open(f'{out_dir_seed}/{model_label}_all_model_metrics.pkl', 'wb'))
+            shap_tuples = all_model_metrics[all_model_metrics['model'] == model_label]['shaps']
+            Shap_summary(X, model_label, out_dir_seed, shap_tuples)
+
+        # Optional: save best hyperparams per model and endpoint
         metrics = all_model_metrics
+        pickle.dump(metrics, open(f'{out_dir_seed}/all_model_metrics.pkl', 'wb'))
         # Unpack the test and validation results
         results = pd.concat([metrics.drop('test', axis=1), pd.DataFrame(metrics['test'].tolist()).add_suffix("_test")], axis=1)
         results = pd.concat(
-            [results.drop('validation', axis=1), pd.DataFrame(metrics['validation'].tolist()).add_suffix("_validation")], axis=1)
-        results.to_csv(f'{out_dir}/individual_metrics.csv')
+            [results.drop('validation', axis=1), pd.DataFrame(metrics['validation'].tolist()).add_suffix("_validation")],
+            axis=1)
+        results.to_csv(f'{out_dir}/individual_metrics_{start_time}_offset_{offset}.csv')
 
         # Metrics to be aggregated
         metrics = ['balanced_accuracy', 'recall', 'precision', 'mcc', 'f1_score', 'roc_auc', 'avg_precision', 'prc_auc']
+        # Convert list to numpy array
+
+        # metrics.to_csv(f'{out_dir}/all_metrics_{start_time}_offset_{offset}.csv')
         # Aggregate results over seeds
-        aggregated = results.groupby(['endpoint', 'model']).agg({item + "_test": ['mean', 'std','count','min','max'] for item in metrics})
-        aggregated.to_csv(f'{out_dir}/aggregated_metrics.csv')
+        aggregated = results.groupby(['endpoint', 'model', 'seed']).agg(
+            {item + "_test": ['mean', 'std', 'count', 'min', 'max'] for item in metrics})
+        if offset is not None:
+            if feature_set is not None:
+                aggregated.to_csv(f'{out_dir}/aggregated_metrics_{start_time}_{"_".join(feature_set)}_offset_{offset}.csv')
+            else:
+                aggregated.to_csv(f'{out_dir}/aggregated_metrics_{start_time}_offset_{offset}.csv')
+        else:
+            aggregated.to_csv(f'{out_dir}/aggregated_metrics_{start_time}.csv')
 
         # filehandler = open(f'{out_dir}/all_model_metrics.pkl', "wb")
         # pickle.dump(all_model_metrics, filehandler)
@@ -176,6 +231,109 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
         #
         # for metric, df in all_test_metric_dfs.items():
         #     df.to_csv(f'{out_dir}/data_frames/{metric}.csv')
+
+
+def pre_tune(X, y, param_grid):
+    # model_name = str(model.__class__.__name__)
+    pipeline_steps = []
+    # prepare param_grid
+    # param_grid = {'model__' + key: value for (key, value) in param_grid.items()}
+    select_features = False
+    # if select_features:
+    #     # Feature selection for each endpoint only on training data
+    #     param_grid['selector'] = [
+    #         model_feature_selection(X_test, X_train, y_train, min_feature_fraction=0.5, cores=1,
+    #                                 scoring=make_scorer(average_precision_score))]
+    #     param_grid['selector'] = [SelectFromModel(XGBClassifier())]
+    #     # param_grid['selector'] = [SelectKBest(k='all'), SelectKBest(k=25),
+    #     #                           SelectFromModel(LinearSVC(C=1, penalty="l1", dual=False, max_iter=5000))]
+    #
+    #     pipeline_steps.extend([('selector', 'passthrough'), ('model', model)])
+    # else:
+    model = param_grid[0]
+    pipeline_steps.append(('model', model))
+    pipeline = Pipeline(pipeline_steps)
+    cv_scoring = 'average_precision'
+    cv = 5
+    log.info(f"Using pipeline {pipeline}")
+    grid_model = RandomizedSearchCV(param_grid[0], param_distributions=param_grid[1], scoring=cv_scoring, verbose=False, cv=cv,
+                                    n_jobs=-1,
+                                    error_score=0, n_iter=30)
+    grid_model.fit(X, y)
+    return grid_model
+
+
+def nested_crossval(X, all_model_metrics, balancing_option, cv_splits, endpoint, out_dir_seed, seed, select_features,
+                    shap_eval, y, pretune_model=None):
+    # Nested CV
+    # model_grid = get_classification_model_grid('balanced' if artificial_balancing_option == 'class_weight' else None, seed=seed)
+    model_grid = get_classification_model_grid(seed=seed)
+    for j, (model, param_grid) in enumerate(model_grid):
+        # if (pretune_model is not None):
+        #     model = max(pretune_model)
+        # stratified_cv = StratifiedKFold(n_splits=cv_splits, shuffle=True, random_state=seed)
+        skf = StratifiedShuffleSplit(n_splits=cv_splits, random_state=seed)
+        model_label = str(model.__class__.__name__)
+        fold_iter = 0
+        for train_i, test_i in skf.split(X, y):
+            log.debug(f'Outer fold: {fold_iter}')
+            out_dir_cv = f'{out_dir_seed}/fold_{fold_iter}'
+            X_train, X_test = X.iloc[train_i], X.iloc[test_i]
+            y_train, y_test = y.iloc[train_i], y.iloc[test_i]
+            val_metrics, test_metrics, curves, best_model, shaps = evaluate_single_model(model, param_grid,
+                                                                                         X_train, y_train, X_test, y_test,
+                                                                                         cv_splits=cv_splits,
+                                                                                         select_features=select_features,
+                                                                                         shap_value_eval=shap_eval,
+                                                                                         out_dir=out_dir_cv,
+                                                                                         sample_balancing=balancing_option,
+                                                                                         seed=seed)
+
+            # all_model_metrics[endpoint][seed][model_label]= {"validation":val_metrics, "test": test_metrics, "curves": curves}
+            all_model_metrics.loc[len(all_model_metrics.index)] = [endpoint, seed, model_label, fold_iter, val_metrics,
+                                                                   test_metrics, curves, best_model, shaps]
+            fold_iter += 1
+        pickle.dump(all_model_metrics, open(f'{out_dir_seed}/{model_label}_all_model_metrics.pkl', 'wb'))
+        # shap_tuples = all_model_metrics[all_model_metrics['model'] == model_label]['shaps']
+        # Shap_summary(X, model_label, out_dir_seed, shap_tuples)
+    return model
+
+
+def Shap_summary(X, model_label, out_dir_seed, shap_tuples):
+    all_shap_values = np.array([t[0] for t in shap_tuples])
+    test_list = np.array([t[1] for t in shap_tuples])
+    appended_shap = np.concatenate(all_shap_values, axis=0)
+    appended_test = np.concatenate(test_list, axis=0)
+    pickle.dump(appended_shap, open(f'{out_dir_seed}/{model_label}_SHAP_values.pkl', 'wb'))
+    # for i in range(1, len(all_shap_values)):
+    #     test_set = np.concatenate((test_set, [i]), axis=0)
+    #     shap_values = np.concatenate((shap_values, np.array(list_shap_values[i])), axis=1)
+    # bringing back variable names
+    # append shap values to each other
+    # mean_shap_values = mean_shap_values.transpose()
+    num_features = 40
+    test_df = X.iloc[appended_test, :]
+    pickle.dump(test_df, open(f'{out_dir_seed}/{model_label}_SHAP_test.pkl', 'wb'))
+    # Plot the combined SHAP values
+    shap.summary_plot(appended_shap, features=test_df, max_display=num_features, show=False)
+    # cohort = [
+    #     "Main" if appended_shap[i, "identifier_cohort"].data == 0 else "External"
+    #     for i in range(appended_shap.shape[0])
+    # ]
+    # shap.plots.bar(appended_shap.cohorts(cohort).abs.mean(0))
+    plt.tight_layout()
+    output_format = "pdf"
+    plt.savefig(f'{out_dir_seed}/{model_label}_SHAP_summary.{output_format}'.replace(' ', '_'),
+                format=output_format)
+    plt.close()
+    shap.summary_plot(appended_shap, features=test_df, plot_type='bar', max_display=num_features, show=False)
+    plt.tight_layout()
+    plt.savefig(f'{out_dir_seed}/{model_label}_SHAP_summary_bars.{output_format}'.replace(' ', '_'),
+                format=output_format)
+    plt.close()
+    # shap.plots.bar(mean_shap_values, max_display=num_features, show=False)
+    # plt.tight_layout()
+    # plt.savefig(f'{out_dir_seed}/{model_label}_SHAP_bars.{output_format}'.replace(' ', '_'), format=output_format)
 
 
 def generate_summary_plots(all_model_metrics, label_col, model, out_dir, y):
@@ -204,7 +362,7 @@ def generate_summary_plots(all_model_metrics, label_col, model, out_dir, y):
     plot_summary_roc_pr(all_model_metrics, out_dir, label_col, y)
 
 
-def setup_output_directory(dataset, feature_set, out_dir):
+def setup_output_directory(dataset, feature_set, out_dir, offset=0):
     # Setup output directory
     # seed = seed
     # np.random.seed(seed)
@@ -213,14 +371,14 @@ def setup_output_directory(dataset, feature_set, out_dir):
     if out_dir is None:
         # Set up an extra directory for this dataset
         feature_set_string = '' if feature_set is None else f'_{"_".join(feature_set)}'
-        #out_dir = f'results_{dataset}{feature_set_string}_{now}_seed_{seed}'
-        out_dir = f'results_{dataset}{feature_set_string}_{now}'
+        # out_dir = f'results_{dataset}{feature_set_string}_{now}_seed_{seed}'
+        out_dir = f'results_{dataset}{feature_set_string}_offset_{offset}_{now}'
     else:
         # Output directory already exists, make subdirectory for this run
         feature_set_string = '' if feature_set is None else f'_{"_".join(feature_set)}'
         # out_dir = f'{out_dir}/results_{dataset}{feature_set_string}_{now}_seed_{seed}'
-        out_dir = f'{out_dir}/results_{dataset}{feature_set_string}_{now}'
+        out_dir = f'{out_dir}/results_{dataset}{feature_set_string}_offset_{offset}_{now}'
     log.info(f"Logging results to: {out_dir}")
     os.makedirs(f'{out_dir}', exist_ok=True)
     # os.makedirs(f'{out_dir}/data_frames', exist_ok=True)
-    return out_dir
+    return out_dir, now
