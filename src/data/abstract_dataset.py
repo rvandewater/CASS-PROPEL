@@ -6,15 +6,20 @@ class Dataset:
     def __init__(self,
                  data_path,
                  data_infos_path,
-                 validation_data_path=None):
+                 validation_data_path=None,
+                 offset=12):
         self.path = data_path
+        self.data_infos_path = data_infos_path
         self.data_infos = pd.read_csv(data_infos_path)
         # External validation data
         self.validation_data_path = validation_data_path
-
+        log.info(f"Data path: {self.path}")
+        log.info(f"Data infos path: {self.data_infos_path}")
+        log.info(f"Validation data path: {self.validation_data_path}")
         self.feature_set = None
         self.X = None
         self.Y = None
+
 
     def get_all_features(self, include_drop_columns=True):
         """Return list of names of all features
@@ -199,6 +204,9 @@ class Dataset:
         """
         self.feature_set = feature_set
         original_data, external_validation_data = self.read_csv()
+        log.debug(f"Original data shape: {original_data.shape}")
+        log.debug(f"Head of original data: {original_data.head()}")
+
         # print(validation_data.head())
         # print(df.head())
 
@@ -218,15 +226,19 @@ class Dataset:
 
         if feature_set is not None:
             drop_columns_list.extend(list(self.data_infos.loc[
-                                              ~self.data_infos['endpoint'] & ~self.data_infos['input_time'].isin(
+                                              ~self.data_infos['endpoint'] & ~self.data_infos['input_type'].isin(
                                                   feature_set), 'column_name']))
-
+            # drop_columns_list.extend(list(self.data_infos.loc[
+            #                                   ~self.data_infos['endpoint'] & ~self.data_infos.isin(feature_set), 'column_name']))
+        drop_columns=True
         if drop_columns:
             drop_columns_list.extend(list(self.data_infos.loc[self.data_infos['drop'], 'column_name']))
             # Remove the updated values from esophagus_info_updated
             log.debug(f"Column difference: {list(set(self.data_infos.column_name.values).difference(set(original_data.columns.values)))}")
             difference = list(set(self.data_infos.column_name.values).difference(set(original_data.columns.values)))
             self.data_infos = self.data_infos[~self.data_infos["column_name"].isin(difference)]
+
+        log.info(f"Dropping {list(drop_columns_list)} from data")
         original_data.drop(columns=drop_columns_list, inplace=True, errors='ignore')
 
         if drop_missing_value > 0:
