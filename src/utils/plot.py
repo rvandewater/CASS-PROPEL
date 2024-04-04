@@ -100,7 +100,7 @@ def plot_coefficients(out_dir, coefs, feature_names, model_name, label_name, top
 
 
 def plot_summary_roc(all_model_metrics, out_dir, label_col, dataset_partition='val', title=None, legend=False,
-                     value_in_legend=True):
+                     value_in_legend=True, editable=True):
     """
     Plot ROC curves for all models in one figure.
     Parameters
@@ -150,11 +150,13 @@ def plot_summary_roc(all_model_metrics, out_dir, label_col, dataset_partition='v
     ax.tick_params(axis='both', which='minor', labelsize=12)
     plt.savefig(f'{out_dir}/all_models_{dataset_partition}_roc_curves.{output_format}'.replace(' ', '_'),
                 bbox_inches='tight', dpi=dpi, format=output_format)
+    if editable:
+        save_editable_plot(f'{out_dir}/all_models_{dataset_partition}_roc_curves')
     plt.close()
 
 
 def plot_summary_prc(all_model_metrics, out_dir, label_col, y, dataset_partition='val', title=None, legend=False,
-                     value_in_legend=True):
+                     value_in_legend=True, editable=True):
     """
     Plot PRC curves for all models in one figure.
     Parameters
@@ -204,10 +206,12 @@ def plot_summary_prc(all_model_metrics, out_dir, label_col, y, dataset_partition
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15))
     plt.savefig(f'{out_dir}/all_models_{dataset_partition}_prc_curves.{output_format}'.replace(' ', '_'),
                 bbox_inches='tight', dpi=dpi, format=output_format)
+    if editable:
+        save_editable_plot(f'{out_dir}/all_models_{dataset_partition}_prc_curves')
     plt.close()
 
 
-def plot_summary_roc_pr(all_model_metrics, out_dir, label_col, y):
+def plot_summary_roc_pr(all_model_metrics, out_dir, label_col, y, editable=True):
     """
     Plot both ROC and PR curves for all models in one figure.
     Parameters
@@ -247,6 +251,8 @@ def plot_summary_roc_pr(all_model_metrics, out_dir, label_col, y):
     ax2.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15))
     plt.savefig(f'{out_dir}/all_models_roc_prc_curves.{output_format}'.replace(' ', '_'),
                 bbox_inches='tight', dpi=dpi, format=output_format)
+    if editable:
+        save_editable_plot(f'{out_dir}/all_models_roc_prc_curves')
     plt.close()
 
 
@@ -271,7 +277,6 @@ def plot_val_mean_roc(ax, tprs, aucs, x_linspace):
     ax.set(xlim=[-0.05, 1.05], ylim=[-0.05, 1.05],
            title='ROC')
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15))
-
     return mean_tpr
 
 
@@ -331,7 +336,7 @@ def plot_roc_pr_curve(X_test, y_test, endpoint, model, model_name, out_dir, edit
     return roc_plot, prc_plot
 
 
-def plot_confusion_matrix(label, confusion_matrix, model_name, out_dir, phase):
+def plot_confusion_matrix(label, confusion_matrix, model_name, out_dir, phase, editable=True):
     cm_fig, ax = plt.subplots()
     output_format='png'
     cm_fig.suptitle(f'{model_name} predicting {label}')
@@ -340,10 +345,12 @@ def plot_confusion_matrix(label, confusion_matrix, model_name, out_dir, phase):
     disp.plot(include_values=True, cmap='Blues', ax=ax,
               xticks_rotation='horizontal', values_format='d')
     plt.savefig(f'{out_dir}/{phase}/{model_name}_cm.{output_format}'.replace(' ', '_'), format=output_format)
+    if editable:
+        save_editable_plot(f'{out_dir}/{phase}/{model_name}_cm')
     plt.close()
 
 
-def plot_shap_values(X_test, X_train, y_train, model, model_name, out_dir, select_features):
+def plot_shap_values(X_test, X_train, y_train, model, model_name, out_dir, select_features, editable=False):
     """
     Plot SHAP values for the test set and save graph to the output directory. Returns compute shap values for the test set.
     Args:
@@ -387,13 +394,17 @@ def plot_shap_values(X_test, X_train, y_train, model, model_name, out_dir, selec
         shap.summary_plot(test_shap_values, X_test, show=False)
         plt.tight_layout()
         plt.savefig(f'{out_dir}/{model_name}_SHAP.{output_format}'.replace(' ', '_'), dpi=dpi, format=output_format)
+        if editable:
+            save_editable_plot(f'{out_dir}/{model_name}_SHAP')
         plt.close()
-
         shap.summary_plot(test_shap_values, X_test, plot_type='bar', show=False)
         plt.tight_layout()
         plt.savefig(f'{out_dir}/{model_name}_SHAP_bars.{output_format}'.replace(' ', '_'), dpi=dpi, format=output_format)
+        if editable:
+            save_editable_plot(f'{out_dir}/{model_name}_SHAP_bars')
         plt.close()
         log.info(f"SHAP values for {model_name} predicting {y_train.name} saved to {out_dir}")
+
         return test_shap_values
         # CV SHAP values
         # shap_values_list = []
@@ -421,13 +432,15 @@ def plot_shap_values(X_test, X_train, y_train, model, model_name, out_dir, selec
         # plt.close()
 
 
-def plot_calibration_curves(X_test, y_test, endpoint, model, model_name, out_dir):
+def plot_calibration_curves(X_test, y_test, endpoint, model, model_name, out_dir, editable=False):
     sns.set(style='darkgrid', context='talk', palette='rainbow')
     fig, ax = plt.subplots()
     fig.suptitle(f'{model_name} predicting {endpoint}')
     CalibrationDisplay.from_estimator(model, X_test, y_test, n_bins=10, name=model_name, ax=ax)
     plt.tight_layout()
     plt.savefig(f'{out_dir}/test/{model_name}_calibration.{output_format}'.replace(' ', '_'), dpi=dpi, format=output_format)
+    if editable:
+        save_editable_plot(f'{out_dir}/test/{model_name}_calibration')
     plt.close()
     sns.reset_orig()
 
