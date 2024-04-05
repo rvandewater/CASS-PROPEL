@@ -13,7 +13,7 @@ from src.preprocess import common_preprocessing
 from src.models import get_classification_model_grid
 from src.evaluate import evaluate_single_model
 from src.utils.file_creation import setup_output_directory
-from src.utils.metrics import all_classification_metrics_list, Shap_summary
+from src.utils.metrics import all_classification_metrics_list, shap_summary
 import logging as log
 
 # import feature_engine
@@ -22,7 +22,7 @@ bars = '====================='
 
 def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer, normaliser, drop_features,
                select_features, cv_splits, shap_eval, test_fraction, artificial_balancing_option, drop_missing_value,
-               data_exploration, missing_threshold, correlation_threshold, nested_cv=True, cores=1, offset=12):
+               data_exploration, missing_threshold, correlation_threshold, nested_cv=True, cores=1, offset=None):
     """
     Main function for evaluation of classical ML models on post-operative complications dataset.
 
@@ -92,7 +92,7 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
     # Iterate over endpoints
     for k, endpoint in enumerate(Y.columns):
         out_dir_endpoint = f'{out_dir}/{endpoint.replace(" ", "_")}'
-        log.info(f'Predicting {endpoint}')
+        log.info(f'{bars} Predicting {endpoint} {bars}')
 
         # Set endpoint for iteration
         y = Y[endpoint]
@@ -106,8 +106,8 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
             seed = seed
             np.random.seed(seed)
             random.seed(seed)
-            # with open(f'{out_dir_seed}/best_parameters.txt', 'a+') as f:
-            #     f.write(f'=====\n{endpoint}\n=====')
+            with open(f'{out_dir_seed}/best_parameters.txt', 'a+') as f:
+                f.write(f'=====\n{endpoint}\n=====')
 
             log.info(Y.info())
 
@@ -160,14 +160,15 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
                 #     generate_summary_plots(all_model_metrics, endpoint, model, out_dir_seed, y)
 
             # We take the shap values from all models and generate one SHAP plot per seed
-            for model_name in all_model_metrics['model'].unique():
-                shap_tuples = all_model_metrics[all_model_metrics['model'] == model_name]['shaps']
-                Shap_summary(X, model_name, out_dir_seed, shap_tuples)
+        for model_name in all_model_metrics['model'].unique():
+            shap_tuples = all_model_metrics[all_model_metrics['model'] == model_name]['shaps']
+            shap_summary(X, model_name, out_dir, shap_tuples)
 
         metric_summarization(all_model_metrics, feature_set, offset, out_dir, start_time)
 
 
 def metric_summarization(all_model_metrics, feature_set, offset, out_dir, start_time):
+    pickle.dump(all_model_metrics, open(f'{out_dir}/all_metrics.pkl', 'wb'))
     metrics = all_model_metrics
     # Unpack the test and validation results
     results = pd.concat([metrics.drop('test', axis=1), pd.DataFrame(metrics['test'].tolist()).add_suffix("_test")], axis=1)
@@ -187,7 +188,6 @@ def metric_summarization(all_model_metrics, feature_set, offset, out_dir, start_
             aggregated.to_csv(f'{out_dir}/aggregated_metrics_{start_time}_offset_{offset}.csv')
     else:
         aggregated.to_csv(f'{out_dir}/aggregated_metrics_{start_time}.csv')
-    pickle.dump(metrics, open(f'{out_dir}/all_metrics.pkl', 'wb'))
     # filehandler = open(f'{out_dir}/all_model_metrics.pkl', "wb")
     # pickle.dump(all_model_metrics, filehandler)
     # filehandler.close()
@@ -205,7 +205,7 @@ def metric_summarization(all_model_metrics, feature_set, offset, out_dir, start_
     #     df.to_csv(f'{out_dir}/data_frames/{metric}.csv')
 
 
-def pretune(X, artificial_balancing_option, seeds, y):
+def pretune(X, artificial_balancing_option, seeds, y, cv=5):
     model_scores = {}
     model_params = {}
     for seed in seeds:
@@ -231,14 +231,12 @@ def pretune(X, artificial_balancing_option, seeds, y):
         pipeline_steps.append(('model', model))
         pipeline = Pipeline(pipeline_steps)
         cv_scoring = 'average_precision'
-        cv = 5
         log.info(f"Using pipeline {pipeline}")
         grid_model = RandomizedSearchCV(model_grid[0], param_distributions=model_grid[1], scoring=cv_scoring, verbose=False,
                                         cv=cv,
                                         n_jobs=-1,
                                         error_score=0, n_iter=30)
         grid_model.fit(X, y)
-        # grid_model.best_model.score(X,y)
         model_scores[seed] = grid_model.best_score_
         model_params[seed] = grid_model
     log.info(model_scores)
@@ -256,8 +254,7 @@ def nested_crossval(X, all_model_metrics, balancing_option, cv_splits, endpoint,
     for j, (model, param_grid) in enumerate(model_grid):
         # if (pretune_model is not None):
         #     model = max(pretune_model)
-        # stratified_cv = StratifiedKFold(n_splits=cv_splits, shuffle=True, random_state=seed)
-        skf = StratifiedShuffleSplit(n_splits=cv_splits, random_state=seed)
+        skf = StratifiedShuffleSplit(n_splits=cv_splits, random_state=seed, train_size=0.8)
         model_label = str(model.__class__.__name__)
         fold_iter = 0
         for train_i, test_i in skf.split(X, y):
@@ -265,7 +262,8 @@ def nested_crossval(X, all_model_metrics, balancing_option, cv_splits, endpoint,
             out_dir_cv = f'{out_dir_seed}/fold_{fold_iter}'
             X_train, X_test = X.iloc[train_i], X.iloc[test_i]
             y_train, y_test = y.iloc[train_i], y.iloc[test_i]
-            val_metrics, test_metrics, curves, best_model, shaps = evaluate_single_model(model, param_grid,
+            # val_metrics, test_metrics, curves, best_model, shaps = evaluate_single_model(model, param_grid,
+            test_metrics, test_curves, best_model, shaps = evaluate_single_model(model, param_grid,
                                                                                          X_train, y_train, X_test, y_test,
                                                                                          cv_splits=cv_splits,
                                                                                          select_features=select_features,
@@ -275,8 +273,10 @@ def nested_crossval(X, all_model_metrics, balancing_option, cv_splits, endpoint,
                                                                                          seed=seed)
 
             # all_model_metrics[endpoint][seed][model_label]= {"validation":val_metrics, "test": test_metrics, "curves": curves}
-            all_model_metrics.loc[len(all_model_metrics.index)] = [endpoint, seed, model_label, fold_iter, val_metrics,
-                                                                   test_metrics, curves, best_model, shaps]
+            # all_model_metrics.loc[len(all_model_metrics.index)] = [endpoint, seed, model_label, fold_iter, val_metrics,
+            #                                                        test_metrics, curves, best_model, shaps]
+            all_model_metrics.loc[len(all_model_metrics.index)] = [endpoint, seed, model_label, fold_iter, 0,
+                                                                   test_metrics, test_curves, best_model, shaps]
             fold_iter += 1
         pickle.dump(all_model_metrics, open(f'{out_dir_seed}/{model_label}_all_model_metrics.pkl', 'wb'))
         # shap_tuples = all_model_metrics[all_model_metrics['model'] == model_label]['shaps']

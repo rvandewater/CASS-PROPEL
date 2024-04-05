@@ -128,7 +128,7 @@ def evaluate_single_model(model, param_grid,
                           X_train, y_train, X_test, y_test,
                           cv_splits=5, cv_scoring='average_precision', select_features=False, shap_value_eval=False,
                           cm_agg_type='sum', out_dir='results/default', sample_balancing=None, seed=42,
-                          search_method='random'):
+                          search_method=('random',30), pretune=False):
     os.makedirs(f'{out_dir}/val/', exist_ok=True)
     os.makedirs(f'{out_dir}/test/', exist_ok=True)
     model_name = str(model.__class__.__name__)
@@ -137,9 +137,11 @@ def evaluate_single_model(model, param_grid,
     if cv_splits > 0:
         log.info(f'Evaluating model {model_name} with {cv_splits}-fold CV')
         log.info(
-            f'Total split into Train/Val/Test: {round(100 * (cv_splits - 1) / cv_splits * len(y_train) / (len(y_train) + len(y_test)))}/' +
-            f'{round(100 / cv_splits * len(y_train) / (len(y_train) + len(y_test)))}/{round(100 * len(y_test) / (len(y_train) + len(y_test)))}' +
-            f' - Absolute Samples: {len(y_train) - round(len(y_train) / cv_splits)}/{round(len(y_train) / cv_splits)}/{len(y_test)}')
+            f"Total split into Train/Test: {round(100 * len(y_train) / (len(y_train) + len(y_test)))} / {round(100 * len(y_test) / (len(y_train) + len(y_test)))}" +
+            f' - Absolute Samples: {len(y_train)}/{len(y_test)}')
+            # f'Total split into Train/Val/Test: {round(100 * (cv_splits - 1) / cv_splits * len(y_train) / (len(y_train) + len(y_test)))}/' +
+            # f'{round(100 / cv_splits * len(y_train) / (len(y_train) + len(y_test)))}/{round(100 * len(y_test) / (len(y_train) + len(y_test)))}' +
+            # f' - Absolute Samples: {len(y_train) - round(len(y_train) / cv_splits)}/{round(len(y_train) / cv_splits)}/{len(y_test)}')
 
         cv = StratifiedKFold(n_splits=cv_splits, shuffle=True, random_state=seed)
     else:
@@ -170,7 +172,6 @@ def evaluate_single_model(model, param_grid,
         pipeline_steps.append(('over_sampling', over_sampler))
 
     # ================= SELECT OPTIMAL MODEL AND FEATURE SET THROUGH CV =================
-    pretune = True
     # Define metrics used
     all_metrics_list = all_classification_metrics_list
 
@@ -195,12 +196,10 @@ def evaluate_single_model(model, param_grid,
 
         if search_method == 'grid':
             grid_model = GridSearchCV(pipeline, param_grid=param_grid, scoring=cv_scoring, verbose=False, cv=cv,
-                                      n_jobs=-1,
-                                      error_score=0)
-        elif search_method == 'random':
+                                      n_jobs=-1, error_score=0)
+        elif search_method[0] == 'random':
             grid_model = RandomizedSearchCV(pipeline, param_distributions=param_grid, scoring=cv_scoring, verbose=False, cv=cv,
-                                            n_jobs=1,
-                                            error_score=0, n_iter=10)
+                                            n_jobs=-1, error_score=0, n_iter=search_method[1])
         else:
             raise ValueError(f'Unknown method {search_method}')
         grid_model.fit(X_train, y_train)
@@ -227,15 +226,17 @@ def evaluate_single_model(model, param_grid,
     #     f.write(f'\nBest Params: {grid_model.best_params_}\n')
     # log.info(f'Best Params: {grid_model.best_params_} - {cv_scoring}: {grid_model.best_score_}')
 
-    cv_metrics, mean_tpr, overall_precision, overall_recall = independent_validation(X_test, X_train, all_metrics_list,
-                                                                                     best_model, cm_agg_type, cv, cv_splits,
-                                                                                     model_name, out_dir, select_features,
-                                                                                     shap_value_eval, y_test, y_train)
+    # cv_metrics, mean_tpr, overall_precision, overall_recall = independent_validation(X_test, X_train, all_metrics_list,
+    #                                                                                  best_model, cm_agg_type, cv, cv_splits,
+    #                                                                                  model_name, out_dir, select_features,
+    #                                                                                  shap_value_eval, y_test, y_train)
     # =================== Final Model Testing ===============
     test_metrics, test_curves, shaps = test_classification_model(best_model, X_train, y_train, X_test, y_test,
                                                                  model_name, select_features, out_dir)
-    return cv_metrics, test_metrics, ((mean_tpr, overall_precision, overall_recall), test_curves), best_model, (
-    shaps, list(X_test.index))
+    # return cv_metrics, test_metrics, ((mean_tpr, overall_precision, overall_recall), test_curves), best_model, (
+    # shaps, list(X_test.index))
+
+    return test_metrics, test_curves, best_model, (shaps, list(X_test.index))
 
 
 def independent_validation(X_test, X_train, all_metrics_list, best_model, cm_agg_type, cv, cv_splits, model_name, out_dir,

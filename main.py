@@ -46,7 +46,7 @@ def get_parser():
                         help='List of seeds for reproducibility, also determines individual repetitions')
     parser.add_argument('--cores', '-c', type=int, default=8,
                         help='Number of cores to use for parallel processing')
-    parser.add_argument('--offset', '-of', type=int, default=12,
+    parser.add_argument('--offset', '-of', type=int, default=None,
                         help='Time offset')
     return parser
 

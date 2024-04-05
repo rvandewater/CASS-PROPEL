@@ -374,8 +374,8 @@ def plot_shap_values(X_test, X_train, y_train, model, model_name, out_dir, selec
         if model_name == 'LogisticRegression':
             explainer = shap.LinearExplainer(model, train_data)#(model.named_steps['model'], train_data)
         elif model_name in ['DecisionTreeClassifier', 'RandomForestClassifier', 'GradientBoostingClassifier', 'XGBClassifier']:
-            # explainer = shap.TreeExplainer(model.named_steps['model'], train_data)
-            explainer = shap.TreeExplainer(model, train_data=train_data, check_additivity=False)
+            explainer = shap.TreeExplainer(model.named_steps['model'], train_data, check_additivity=False)
+            # explainer = shap.TreeExplainer(model, train_data=train_data, check_additivity=False)
         else:
             if hasattr(model, "predict_proba"):
                 f = lambda x: model.predict_proba(x)[:, 1]
