@@ -1,4 +1,5 @@
 import json
+import logging
 
 import numpy as np
 import seaborn as sns
@@ -12,6 +13,7 @@ import os.path as pth
 import warnings
 import logging as log
 import pickle
+from src.models import tree_models
 # 001C7F, #D62728, #017517, #8C0900, #7600A1, #B8860B, #FF7F0E
 dpi = 300
 colors = ['#001C7F', '#D62728', '#017517', '#8C0900', '#7600A1', '#B8860B', '#FF7F0E']
@@ -144,8 +146,8 @@ def plot_summary_roc(all_model_metrics, out_dir, label_col, dataset_partition='v
     ax.set(xlim=[-0.05, 1.05], ylim=[-0.05, 1.05])
     if legend:
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15))
-    plt.xlabel('False Positive Rate', fontsize=18)
-    plt.ylabel('True Positive Rate', fontsize=18)
+    plt.xlabel('False Positive Rate (1 - Specificity)', fontsize=18)
+    plt.ylabel('True Positive Rate (Sensitivity)', fontsize=18)
     ax.tick_params(axis='both', which='major', labelsize=12)
     ax.tick_params(axis='both', which='minor', labelsize=12)
     plt.savefig(f'{out_dir}/all_models_{dataset_partition}_roc_curves.{output_format}'.replace(' ', '_'),
@@ -321,12 +323,25 @@ def plot_roc_pr_curve(X_test, y_test, endpoint, model, model_name, out_dir, edit
     ax2.set_aspect('equal')
     ax1.set(xlim=[-0.05, 1.05], ylim=[0.0, 1.05])
     ax2.set(xlim=[-0.05, 1.05], ylim=[0.0, 1.05])
-    fig.suptitle(f'{model_name} predicting {endpoint}')
+    # fig.suptitle(f'{model_name} predicting {endpoint}')
     # ROC
     roc_plot = RocCurveDisplay.from_estimator(model, X_test, y_test, name='ROC curve', lw=1, ax=ax1)
+    ax1.plot([0, 1], [0, 1], linestyle='--', color='red', label='Chance level (AUC = 0.5)')
+    ax1.set_xlabel('False Positive Rate (1 - Specificity)')
+    ax1.set_ylabel('True Positive Rate (Sensitivity)')
+    ax1.legend()
+
     ax2.set(xlim=[-0.05, 1.05], ylim=[0.0, 1.05])
     prc_plot = PrecisionRecallDisplay.from_estimator(model, X_test, y_test,
                                                      name='PR curve', lw=1, ax=ax2)
+    try:
+        pos_label_ratio = sum(y_test) / len(y_test)
+        ax2.plot([0, 1], [pos_label_ratio, pos_label_ratio], linestyle='--', color='red', label=f'Chance level (AP = {pos_label_ratio:.2f})')
+    except:
+        logging.info('Could not calculate chance level for PR curve')
+    ax2.set_xlabel('Recall')
+    ax2.set_ylabel('Precision')
+    ax2.legend()
     plt.savefig(f'{out_dir}/test/{model_name}_roc_prc_curves.{output_format}'.replace(' ', '_'), bbox_inches='tight', dpi=dpi, format=output_format)
 
     if editable:
@@ -350,10 +365,11 @@ def plot_confusion_matrix(label, confusion_matrix, model_name, out_dir, phase, e
     plt.close()
 
 
-def plot_shap_values(X_test, X_train, y_train, model, model_name, out_dir, select_features, editable=False):
+def calculate_plot_shap_values(X_test, X_train, y_train, model, model_name, out_dir, select_features, editable=False):
     """
     Plot SHAP values for the test set and save graph to the output directory. Returns compute shap values for the test set.
     Args:
+        editable:
         X_test:
         X_train:
         y_train:
@@ -363,25 +379,26 @@ def plot_shap_values(X_test, X_train, y_train, model, model_name, out_dir, selec
         select_features:
 
     Returns:
+        SHAP values for the test set
 
     """
-    def get_shap_values(test_data, train_data):
+    def get_shap_values(test_data, train_data, silent=True):
         if select_features:
             train_data = model.named_steps['selector'].transform(train_data)
             test_data = model.named_steps['selector'].transform(test_data)
 
         # Get SHAP values function
         if model_name == 'LogisticRegression':
-            explainer = shap.LinearExplainer(model, train_data)#(model.named_steps['model'], train_data)
-        elif model_name in ['DecisionTreeClassifier', 'RandomForestClassifier', 'GradientBoostingClassifier', 'XGBClassifier']:
-            explainer = shap.TreeExplainer(model.named_steps['model'], train_data, check_additivity=False)
-            # explainer = shap.TreeExplainer(model, train_data=train_data, check_additivity=False)
+            explainer = shap.LinearExplainer(model, train_data, silent=silent)#(model.named_steps['model'], train_data)
+        elif model_name in tree_models:
+            # explainer = shap.TreeExplainer(model.named_steps['model'], train_data, check_additivity=False, silent=silent)
+            explainer = shap.TreeExplainer(model, train_data=train_data, check_additivity=False)
         else:
             if hasattr(model, "predict_proba"):
                 f = lambda x: model.predict_proba(x)[:, 1]
-                explainer = shap.KernelExplainer(f, train_data)
+                explainer = shap.KernelExplainer(f, train_data, silent=silent)
             else:
-                explainer = shap.KernelExplainer(model.decision_function, train_data)
+                explainer = shap.KernelExplainer(model.decision_function, train_data, silent=silent)
         log.debug(f"Explainer: {test_data.shape} {train_data.shape}")
         log.debug(f"Explainer: {test_data.head()}")
         return explainer.shap_values(test_data)
@@ -389,7 +406,7 @@ def plot_shap_values(X_test, X_train, y_train, model, model_name, out_dir, selec
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
         # Test SHAP values
-        model.fit(X_train, y_train)
+        # model.fit(X_train, y_train)
         test_shap_values = get_shap_values(X_test, X_train)
         shap.summary_plot(test_shap_values, X_test, show=False)
         plt.tight_layout()

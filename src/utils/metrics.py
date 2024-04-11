@@ -43,10 +43,11 @@ def shap_summary(X, model_label, out_dir, shap_tuples, editable=True):
     # bringing back variable names
     # append shap values to each other
     # mean_shap_values = mean_shap_values.transpose()
-    num_features = 40
+    num_features = 20
     test_df = X.iloc[appended_test, :]
     pickle.dump(test_df, open(f'{out_dir}/{model_label}_SHAP_test.pkl', 'wb'))
     # Plot the combined SHAP values
+    plt.figure(figsize=(20, 5))
     shap.summary_plot(appended_shap, features=test_df, max_display=num_features, show=False)
     # cohort = [
     #     "Main" if appended_shap[i, "identifier_cohort"].data == 0 else "External"
