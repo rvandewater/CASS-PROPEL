@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "van de Water"
+  given-names: "Robin"
+  orcid: "https://orcid.org/0000-0002-2895-4872"
+- family-names: "Pfitzner"
+  given-names: "Bjarne"
+  orcid: "https://orcid.org/0000-0001-7824-8872"
+title: "CASS-PROPEL (Clinical ASSist - Patient Risk/Outcome Prediction and EvaLuation)"
+version: 1.0
+doi: 10.5281/zenodo.1234
+date-released: 2024-04-01
+url: "https://github.com/rvandewater/CASS-PROPEL"
