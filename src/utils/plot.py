@@ -406,7 +406,7 @@ def calculate_plot_shap_values(X_test, X_train, y_train, model, model_name, out_
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
         # Test SHAP values
-        # model.fit(X_train, y_train)
+        # model.fit(x_train, y_train)
         test_shap_values = get_shap_values(X_test, X_train)
         shap.summary_plot(test_shap_values, X_test, show=False)
         plt.tight_layout()
@@ -426,24 +426,24 @@ def calculate_plot_shap_values(X_test, X_train, y_train, model, model_name, out_
         # CV SHAP values
         # shap_values_list = []
         # test_ixs = []
-        # for train_ix, test_ix in cv.split(X_train, y_train):
+        # for train_ix, test_ix in cv.split(x_train, y_train):
         #     test_ixs.append(test_ix)
         #
-        #     X_tr = X_train.iloc[train_ix]
+        #     X_tr = x_train.iloc[train_ix]
         #     y_tr = y_train.iloc[train_ix]
-        #     X_te = X_train.iloc[test_ix]
+        #     X_te = x_train.iloc[test_ix]
         #     model.fit(X_tr, y_tr)
         #     shap_values = get_shap_values(X_te, X_tr)
         #     for shap_value in shap_values:
         #         shap_values_list.append(shap_value)
         #
         # new_index = [ix for ix_test_fold in test_ixs for ix in ix_test_fold]
-        # shap.summary_plot(np.array(shap_values_list), X_train.reindex(new_index), show=False)
+        # shap.summary_plot(np.array(shap_values_list), x_train.reindex(new_index), show=False)
         # plt.tight_layout()
         # plt.savefig(f'{out_dir}/{y_train.name}/val/{model_name}_SHAP.{output_format}'.replace(' ', '_'), dpi=dpi, format=output_format)
         # plt.close()
         #
-        # shap.summary_plot(np.array(shap_values_list), X_train.reindex(new_index), plot_type='bar', show=False)
+        # shap.summary_plot(np.array(shap_values_list), x_train.reindex(new_index), plot_type='bar', show=False)
         # plt.tight_layout()
         # plt.savefig(f'{out_dir}/{y_train.name}/val/{model_name}_SHAP_bars.{output_format}'.replace(' ', '_'), dpi=dpi, format=output_format)
         # plt.close()

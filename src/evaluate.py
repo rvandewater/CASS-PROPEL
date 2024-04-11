@@ -126,25 +126,47 @@ def evaluate_single_cv_split(model, param_grid,
 
 
 def evaluate_single_model(model, param_grid,
-                          X_train, y_train, X_test, y_test,
-                          inner_cv_splits=5, cv_scoring='average_precision', select_features=False, shap_value_eval=False,
+                          x_train, y_train, x_test, y_test,
+                          inner_cv_splits=5, inner_cv_scoring='average_precision', select_features=False, shap_value_eval=False,
                           out_dir='results/default', sample_balancing=None, seed=42,
-                          search_method=('random',30), pretune=False):
-    os.makedirs(f'{out_dir}/val/', exist_ok=True)
+                          search_method=('random', 30), pretune=False):
+    """
+    Evaluate a single model on a given dataset.
+    Args:
+        model: Model to evaluate
+        param_grid: Parameter grid for hyperparameter tuning
+        x_train: Training data
+        y_train: Training labels
+        x_test: Test data
+        y_test: Test labels
+        inner_cv_splits: Amount of splits to use for inner cv model selection
+        inner_cv_scoring: Scoring method for inner cv model selection
+        select_features: Select features using model
+        shap_value_eval: Turn on SHAP value evaluation
+        out_dir: Output directory
+        sample_balancing: SMOTE, ADASYN, random_oversampling 
+        seed: Seed
+        search_method: Hyperparameter search method
+        pretune: Use pre-tuned model
+
+    Returns: test_metrics, test_curves, best_model, (shaps, list(x_test.index))
+
+    """
     os.makedirs(f'{out_dir}/test/', exist_ok=True)
     model_name = str(model.__class__.__name__)
-
+    log.info(
+        f"Outer split into Train/Test: "
+        f"{round(100 * len(y_train) / (len(y_train) + len(y_test)))}/"
+        f"{round(100 * len(y_test) / (len(y_train) + len(y_test)))} === "
+        f"Absolute Samples: {len(y_train)}/{len(y_test)}")
     # ================= SETTING UP K-FOLD OR LOO CV =================
-    log.info(f"Outer split into Train/Test: "
-             f"{round(100 * len(y_train) / (len(y_train) + len(y_test)))}/{round(100 * len(y_test) / (len(y_train) + len(y_test)))} === "
-             f"Absolute Samples: {len(y_train)}/{len(y_test)}")
+
     if inner_cv_splits > 0:
         log.info(f'Performing inner cv hyperparameter tuning on {model_name} with {inner_cv_splits}-fold CV')
-        log.info(f"Total inner split: {round(100*((inner_cv_splits-1)/inner_cv_splits))}/{round(100/inner_cv_splits)} === "
-                 f"Absolute Samples: {round(len(y_train)/inner_cv_splits*(inner_cv_splits-1))}/"
-                 f"{round(len(y_train) - len(y_train)/inner_cv_splits*(inner_cv_splits-1))}")
-            # f'{round(100 / cv_splits * len(y_train) / (len(y_train) + len(y_test)))}/{round(100 * len(y_test) / (len(y_train) + len(y_test)))}' +
-            # f' - Absolute Samples: {len(y_train) - round(len(y_train) / cv_splits)}/{round(len(y_train) / cv_splits)}/{len(y_test)}')
+        log.info(
+            f"Total inner split: {round(100 * ((inner_cv_splits - 1) / inner_cv_splits))}/{round(100 / inner_cv_splits)} === "
+            f"Absolute Samples: {round(len(y_train) / inner_cv_splits * (inner_cv_splits - 1))}/"
+            f"{round(len(y_train) - len(y_train) / inner_cv_splits * (inner_cv_splits - 1))}")
         cv = StratifiedKFold(n_splits=inner_cv_splits, shuffle=True, random_state=seed)
     else:
         log.info(f'Performing inner cv hyperparameter tuning on {model_name} with LOO-CV')
@@ -178,7 +200,7 @@ def evaluate_single_model(model, param_grid,
         select_features = False
         if select_features:
             # Feature selection for each endpoint only on training data
-            param_grid['selector'] = [model_feature_selection(X_test, X_train, y_train, min_feature_fraction=0.5, cores=1,
+            param_grid['selector'] = [model_feature_selection(x_test, x_train, y_train, min_feature_fraction=0.5, cores=1,
                                                               scoring=make_scorer(average_precision_score))]
             param_grid['selector'] = [SelectFromModel(XGBClassifier())]
             # param_grid['selector'] = [SelectKBest(k='all'), SelectKBest(k=25),
@@ -192,48 +214,49 @@ def evaluate_single_model(model, param_grid,
         log.info(f"Using pipeline {pipeline}")
 
         if search_method == 'grid':
-            grid_model = GridSearchCV(pipeline, param_grid=param_grid, scoring=cv_scoring, verbose=False, cv=cv,
+            grid_model = GridSearchCV(pipeline, param_grid=param_grid, scoring=inner_cv_scoring, verbose=False, cv=cv,
                                       n_jobs=-1, error_score=0)
         elif search_method[0] == 'random':
-            grid_model = RandomizedSearchCV(pipeline, param_distributions=param_grid, scoring=cv_scoring, verbose=False, cv=cv,
+            grid_model = RandomizedSearchCV(pipeline, param_distributions=param_grid, scoring=inner_cv_scoring, verbose=False, cv=cv,
                                             n_jobs=1, error_score=0, n_iter=search_method[1])
         else:
             raise ValueError(f'Unknown method {search_method}')
-        grid_model.fit(X_train, y_train)
+        grid_model.fit(x_train, y_train)
         best_model = grid_model.best_estimator_
     else:
         grid_model = model
-        best_model = grid_model.fit(X_train, y_train)
+        best_model = grid_model.fit(x_train, y_train)
     log.info("Fitted model")
 
-    try:
-        pass
-    except ValueError as ve:
-        log.info(ve)
-        with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
-            f.write('\n' + model_name)
-            f.write(f'GridSearch Failed due to incompatible options in best selected model.\n')
-        log.warning("GridSearch Failed due to incompatible options in best selected model.")
-        empty_cm = np.zeros((2, 2))
-        return {metric: ([0.0] if metric != 'confusion_matrix' else [empty_cm] * inner_cv_splits) for metric in all_metrics_list}, \
-            {metric: (0.0 if metric != 'confusion_matrix' else empty_cm) for metric in all_metrics_list}, \
-            (([0] * 101, [0] * 101, [0] * 101), ([0] * 101, [0] * 101, [0] * 101))
+    # try:
+    #     pass
+    # except ValueError as ve:
+    #     log.info(ve)
+    #     with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
+    #         f.write('\n' + model_name)
+    #         f.write(f'GridSearch Failed due to incompatible options in best selected model.\n')
+    #     log.warning("GridSearch Failed due to incompatible options in best selected model.")
+    #     empty_cm = np.zeros((2, 2))
+    #     return {metric: ([0.0] if metric != 'confusion_matrix' else [empty_cm] * inner_cv_splits) for metric in
+    #             all_metrics_list}, \
+    #         {metric: (0.0 if metric != 'confusion_matrix' else empty_cm) for metric in all_metrics_list}, \
+    #         (([0] * 101, [0] * 101, [0] * 101), ([0] * 101, [0] * 101, [0] * 101))
     # with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
     #     f.write('\n' + model_name)
     #     f.write(f'\nBest Params: {grid_model.best_params_}\n')
-    # log.info(f'Best Params: {grid_model.best_params_} - {cv_scoring}: {grid_model.best_score_}')
-
-    # cv_metrics, mean_tpr, overall_precision, overall_recall = independent_validation(X_test, X_train, all_metrics_list,
+    # log.info(f'Best Params: {grid_model.best_params_} - {inner_cv_scoring}: {grid_model.best_score_}')
+    # os.makedirs(f'{out_dir}/val/', exist_ok=True)
+    # cv_metrics, mean_tpr, overall_precision, overall_recall = independent_validation(x_test, x_train, all_metrics_list,
     #                                                                                  best_model, cm_agg_type, cv, cv_splits,
     #                                                                                  model_name, out_dir, select_features,
     #                                                                                  shap_value_eval, y_test, y_train)
     # =================== Final Model Testing ===============
-    test_metrics, test_curves, shaps = test_classification_model(best_model, X_train, y_train, X_test, y_test,
-                                                                 model_name, select_features, out_dir)
+    test_metrics, test_curves, shaps = test_classification_model(best_model, x_train, y_train, x_test, y_test,
+                                                                 model_name, select_features, out_dir, shap_eval=shap_value_eval)
     # return cv_metrics, test_metrics, ((mean_tpr, overall_precision, overall_recall), test_curves), best_model, (
-    # shaps, list(X_test.index))
+    # shaps, list(x_test.index))
 
-    return test_metrics, test_curves, best_model, (shaps, list(X_test.index))
+    return test_metrics, test_curves, best_model, (shaps, list(x_test.index))
 
 
 def independent_validation(X_test, X_train, all_metrics_list, best_model, cm_agg_type, cv, cv_splits, model_name, out_dir,

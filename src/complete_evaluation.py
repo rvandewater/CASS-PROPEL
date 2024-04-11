@@ -66,50 +66,54 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
                out_dir=out_dir, exploration=data_exploration, external_validation=external_test_data)
 
     # Preprocess data
-    X, Y = common_preprocessing(data, imputer=imputer, normaliser=normaliser, validation=False,
-                                missing_threshold=missing_threshold, corr_threshold=correlation_threshold)
+    x, ys = common_preprocessing(data, imputer=imputer, normaliser=normaliser, validation=False,
+                                 missing_threshold=missing_threshold, corr_threshold=correlation_threshold)
     log.info(f"{bars} Preprocessing complete {bars}")
-    log.debug(f"Columns:{list(X.columns)}")
+    log.debug(f"Columns:{list(x.columns)}")
 
     # Preprocess external validation data
     if external_test_data:
-        X_val, Y_val = common_preprocessing(data, imputer=imputer, normaliser=normaliser, validation=True)
-        log.info(X_val.columns.difference(X.columns))
+        x_val, y_val = common_preprocessing(data, imputer=imputer, normaliser=normaliser, validation=True)
+        log.info(x_val.columns.difference(x.columns))
         # Get rid of extra columns introduced by values in validation dataset
-        log.info(f'Dropping columns in val data since they are missing in train data: {X_val.columns.difference(X.columns)}')
-        X_val = X_val.drop(set(X_val.columns.difference(X.columns)), axis=1)
-        assert len(X.columns.difference(
-            X_val.columns)) == 0, (f'Error: Train data includes columns {X.columns.difference(X_val.columns)} that are '
+        if len(x_val.columns.difference(x.columns)) > 0:
+            log.info(f'Dropping columns in val data since they are missing in train data: '
+                     f'{list(x_val.columns.difference(x.columns))}')
+        x_val = x_val.drop(set(x_val.columns.difference(x.columns)), axis=1)
+        assert len(x.columns.difference(
+            x_val.columns)) == 0, (f'Error: Train data includes columns {x.columns.difference(x_val.columns)} that are '
                                    f'missing in val data')
 
     with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
-        f.write(f'\n {bars} New Trial at {time.strftime("%d.%m.%Y %H:%M:%S")} {bars} \n')
+        f.write(f'\n {bars} New Trial at {time.strftime("%d.%m.%y %H:%M:%S")} {bars} \n')
         f.write(str(locals()))
         f.write('\n')
 
     all_metrics_list = all_classification_metrics_list
-    # For each endpoint create a dataframe to store all metrics
+
+    # Create a dataframe to store all results
     all_model_metrics = pd.DataFrame(
         columns=["endpoint", "seed", "model", "fold", "validation", "test", "curves", "best_model", "shaps"])
 
     if endpoints is not None:
-        endpoints = list(set(Y.columns).intersection(set(endpoints)))
+        endpoints = list(set(ys.columns).intersection(set(endpoints)))
     else:
-        endpoints = list(Y.columns)
+        endpoints = list(ys.columns)
     if len(endpoints) == 0:
         log.error(f"No endpoints found in dataset or specified in endpoints argument. Check your dataset and/or arguments")
         return
     logging.info(f"Endpoints to compute this run: {endpoints}")
+
     # Iterate over endpoints
-    for k, endpoint in enumerate(endpoints):
+    for endpoint in endpoints:
         out_dir_endpoint = f'{out_dir}/{endpoint.replace(" ", "_")}'
         log.info(f'{bars} Predicting {endpoint} {bars}')
 
         # Set endpoint for iteration
-        y = Y[endpoint]
+        y = ys[endpoint]
         pretune_model = None
         if pretune:
-            pretune_model = (X, artificial_balancing_option, seeds, y)
+            pretune_model = (x, artificial_balancing_option, seeds, y)
         # The amount of independent trails we want to do
         for seed in seeds:
             out_dir_seed = f'{out_dir_endpoint}/{seed}'
@@ -122,26 +126,26 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
 
             if nested_cv and not external_test_data:
                 log.info(f"Using nested CV")
-                model = nested_crossval(X, all_model_metrics, artificial_balancing_option, cv_splits, endpoint,
+                model = nested_crossval(x, all_model_metrics, artificial_balancing_option, cv_splits, endpoint,
                                         out_dir_seed, seed, select_features, shap_eval, y, pretune_model=pretune_model)
             else:
                 # If we do not have an external validation dataset, we split the original dataset
                 if not external_test_data:
-                    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_fraction,
+                    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_fraction,
                                                                         random_state=seed, shuffle=True, stratify=y)
                     log.info(f"Using regular CV")
                 else:
                     # If we have an external validation dataset, we use the original dataset as training data
-                    X_train = X
+                    x_train = x
                     y_train = y
                     # Set test data to be external validation data
-                    X_test = X_val
+                    x_test = x_val
                     # Set endpoint for iteration
-                    y_test = Y_val[endpoint]
+                    y_test = y_val[endpoint]
                     log.info(f"Using external validation data as test data")
 
                 # Feature selection for each endpoint only on training data
-                # X_test, X_train = model_feature_selection(X_test, X_train, y_train, min_feature_fraction=0.5, cores=cores,
+                # x_test, x_train = model_feature_selection(x_test, x_train, y_train, min_feature_fraction=0.5, cores=cores,
                 #                                           scoring=make_scorer(average_precision_score))
                 model_grid = get_classification_model_grid(
                     'balanced' if artificial_balancing_option == 'class_weight' else None, seed=seed)
@@ -151,7 +155,7 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
                 for j, (model, param_grid) in enumerate(model_grid):
                     # val_metrics, test_metrics, curves, best_model, shaps = evaluate_single_model(model, param_grid,
                     test_metrics, test_curves, best_model, shaps = evaluate_single_model(model, param_grid,
-                                                                                         X_train, y_train, X_test,
+                                                                                         x_train, y_train, x_test,
                                                                                          y_test,
                                                                                          inner_cv_splits=5,
                                                                                          select_features=select_features,
@@ -180,7 +184,7 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
                 shap_tuples = all_model_metrics[
                     (all_model_metrics['model'] == model_name) & (all_model_metrics['endpoint'] == endpoint)]['shaps']
                 try:
-                    shap_summary(X, model_name, out_dir_endpoint, shap_tuples)
+                    shap_summary(x, model_name, out_dir_endpoint, shap_tuples)
                 except Exception as e:
                     log.error(f"Error generating SHAP summary plot for {model_name}: {e}")
 
@@ -188,6 +192,7 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
 
 
 def metric_summarization(all_model_metrics, feature_set, offset, out_dir, start_time):
+    """ Summarize metrics and save to file. """
     pickle.dump(all_model_metrics, open(f'{out_dir}/all_metrics.pkl', 'wb'))
     metrics = all_model_metrics
     # Unpack the test and validation results
@@ -228,7 +233,8 @@ def metric_summarization(all_model_metrics, feature_set, offset, out_dir, start_
     #     df.to_csv(f'{out_dir}/data_frames/{metric}.csv')
 
 
-def pretune(X, artificial_balancing_option, seeds, y, cv=5):
+def pretune(x, artificial_balancing_option, seeds, y, cv=5):
+    """ Pre-tune models to find the best model for each seed. """
     model_scores = {}
     model_params = {}
     for seed in seeds:
@@ -241,7 +247,7 @@ def pretune(X, artificial_balancing_option, seeds, y, cv=5):
         # if select_features:
         #     # Feature selection for each endpoint only on training data
         #     param_grid['selector'] = [
-        #         model_feature_selection(X_test, X_train, y_train, min_feature_fraction=0.5, cores=1,
+        #         model_feature_selection(x_test, x_train, y_train, min_feature_fraction=0.5, cores=1,
         #                                 scoring=make_scorer(average_precision_score))]
         #     param_grid['selector'] = [SelectFromModel(XGBClassifier())]
         #     # param_grid['selector'] = [SelectKBest(k='all'), SelectKBest(k=25),
@@ -258,7 +264,7 @@ def pretune(X, artificial_balancing_option, seeds, y, cv=5):
                                         cv=cv,
                                         n_jobs=-1,
                                         error_score=0, n_iter=30)
-        grid_model.fit(X, y)
+        grid_model.fit(x, y)
         model_scores[seed] = grid_model.best_score_
         model_params[seed] = grid_model
     log.info(model_scores)
@@ -268,8 +274,9 @@ def pretune(X, artificial_balancing_option, seeds, y, cv=5):
     return pretune_model.best_estimator_
 
 
-def nested_crossval(X, all_model_metrics, balancing_option, cv_splits, endpoint, out_dir_seed, seed, select_features,
+def nested_crossval(x, all_model_metrics, balancing_option, cv_splits, endpoint, out_dir_seed, seed, select_features,
                     shap_eval, y, pretune_model=None):
+    """ Perform nested cross-validation for model evaluation. """
     # Nested CV
     # model_grid = get_classification_model_grid('balanced' if artificial_balancing_option == 'class_weight' else None, seed=seed)
     model_grid = get_classification_model_grid(seed=seed)
@@ -279,14 +286,14 @@ def nested_crossval(X, all_model_metrics, balancing_option, cv_splits, endpoint,
         skf = StratifiedShuffleSplit(n_splits=cv_splits, random_state=seed, train_size=0.8)
         model_label = str(model.__class__.__name__)
         fold_iter = 0
-        for train_i, test_i in skf.split(X, y):
+        for train_i, test_i in skf.split(x, y):
             log.debug(f'Outer fold: {fold_iter}')
             out_dir_cv = f'{out_dir_seed}/fold_{fold_iter}'
-            X_train, X_test = X.iloc[train_i], X.iloc[test_i]
+            x_train, x_test = x.iloc[train_i], x.iloc[test_i]
             y_train, y_test = y.iloc[train_i], y.iloc[test_i]
             # val_metrics, test_metrics, curves, best_model, shaps = evaluate_single_model(model, param_grid,
             test_metrics, test_curves, best_model, shaps = evaluate_single_model(model, param_grid,
-                                                                                 X_train, y_train, X_test, y_test,
+                                                                                 x_train, y_train, x_test, y_test,
                                                                                  inner_cv_splits=cv_splits,
                                                                                  select_features=select_features,
                                                                                  shap_value_eval=shap_eval,
@@ -302,5 +309,5 @@ def nested_crossval(X, all_model_metrics, balancing_option, cv_splits, endpoint,
             fold_iter += 1
         pickle.dump(all_model_metrics, open(f'{out_dir_seed}/{model_label}_all_model_metrics.pkl', 'wb'))
         # shap_tuples = all_model_metrics[all_model_metrics['model'] == model_label]['shaps']
-        # Shap_summary(X, model_label, out_dir_seed, shap_tuples)
+        # Shap_summary(x, model_label, out_dir_seed, shap_tuples)
     return model

@@ -27,7 +27,7 @@ def common_preprocessing(data: Dataset,
         normaliser: Scaling method for numerical features.
         validation: Whether to use the validation dataset instead of the training dataset.
     Returns:
-        X: Preprocessed feature df.
+        x: Preprocessed feature df.
         Y: Preprocessed label df.
 
     """
@@ -45,10 +45,10 @@ def common_preprocessing(data: Dataset,
 
     # Drop rows with missing values
     if missing_threshold > 0:
-        log.info(f"Shape of X: {X.shape}, dropping rows with missing values {missing_threshold}")
+        log.info(f"Shape of x: {X.shape}, dropping rows with missing values {missing_threshold}")
         row_indices = X.dropna(thresh = missing_threshold, axis = 0)
         X.dropna(thresh=int(len(X.columns) * missing_threshold), axis=0, inplace=True)
-        log.info(f"Shape of X after dropping: {X.shape}")
+        log.info(f"Shape of x after dropping: {X.shape}")
         intersection = row_indices.index.intersection(X.index)
         Y = Y.loc[intersection]
 
@@ -65,13 +65,13 @@ def common_preprocessing(data: Dataset,
     # if len(fs_operations) > 0:
     #     fs = FeatureSelector()
     #     if 'single_unique' in fs_operations:
-    #         fs.identify_single_unique(X)
+    #         fs.identify_single_unique(x)
     #     if 'missing' in fs_operations:
-    #         fs.identify_missing(X, missing_threshold=missing_threshold)
+    #         fs.identify_missing(x, missing_threshold=missing_threshold)
     #     if 'collinear' in fs_operations:
-    #         fs.identify_collinear(X, correlation_threshold=correlation_threshold)
+    #         fs.identify_collinear(x, correlation_threshold=correlation_threshold)
     #         log.info(fs.removal_ops['collinear'])
-    #     X = fs.remove(X, fs_operations, one_hot=False)
+    #     x = fs.remove(x, fs_operations, one_hot=False)
     if corr_threshold > 0:
         X = drop_correlated(X, corr_threshold)
 
@@ -122,11 +122,11 @@ def common_preprocessing(data: Dataset,
         X_numerical = standardScaler.fit_transform(X_numerical)
         X_numerical = pd.DataFrame(X_numerical, columns=X_numerical_feature_names)
 
-    # Build X and y arrays
-    # X = pd.concat([X_binary, data], axis=1)
+    # Build x and y arrays
+    # x = pd.concat([X_binary, data], axis=1)
     log.info(f"Intersection:{len(X_numerical.index.intersection(X_binary.index))}")
     X = X_binary.join(X_numerical, how="outer")
-    # X = X.loc[row_indices.index]
+    # x = x.loc[row_indices.index]
 
     if validation:
         X = X.head(validation_samples)
@@ -198,11 +198,11 @@ def model_feature_selection(X_test: pd.DataFrame,
     # Cross validated feature selection
     select = RFECV(estimator=xgb_model, min_features_to_select=n_features, verbose=0, cv=5, scoring=scoring, n_jobs=cores)
     return select
-    # select = select.fit(X_train, y_train)
+    # select = select.fit(x_train, y_train)
     #
     # # Get the selection mask
     # mask = select.get_support()
-    # X_train = X_train.loc[:, mask]  # select.transform(X_train)
-    # X_test = X_test.loc[:, mask]
-    # log.info(f"Columns after feature selection: {X_train.columns}")
-    # return X_test, X_train
+    # x_train = x_train.loc[:, mask]  # select.transform(x_train)
+    # x_test = x_test.loc[:, mask]
+    # log.info(f"Columns after feature selection: {x_train.columns}")
+    # return x_test, x_train
