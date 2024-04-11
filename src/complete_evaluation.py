@@ -1,3 +1,4 @@
+import logging
 import os
 import pickle
 import time
@@ -22,11 +23,13 @@ bars = '====================='
 
 def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer, normaliser, drop_features,
                select_features, cv_splits, shap_eval, test_fraction, artificial_balancing_option, drop_missing_value,
-               data_exploration, missing_threshold, correlation_threshold, nested_cv=True, cores=1, offset=None):
+               data_exploration, missing_threshold, correlation_threshold, nested_cv=True, cores=1, offset=None,
+               endpoints=None):
     """
     Main function for evaluation of classical ML models on post-operative complications dataset.
 
     Args:
+        endpoints: Select endpoints to process
         seeds: Seeds to use for reproducibility
         out_dir: Output directory
         dataset: The dataset to process
@@ -89,8 +92,16 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
     all_model_metrics = pd.DataFrame(
         columns=["endpoint", "seed", "model", "fold", "validation", "test", "curves", "best_model", "shaps"])
 
+    if endpoints is not None:
+        endpoints = list(set(Y.columns).intersection(set(endpoints)))
+    else:
+        endpoints = list(Y.columns)
+    if len(endpoints) == 0:
+        log.error(f"No endpoints found in dataset or specified in endpoints argument. Check your dataset and/or arguments")
+        return
+    logging.info(f"Endpoints to compute this run: {endpoints}")
     # Iterate over endpoints
-    for k, endpoint in enumerate(Y.columns):
+    for k, endpoint in enumerate(endpoints):
         out_dir_endpoint = f'{out_dir}/{endpoint.replace(" ", "_")}'
         log.info(f'{bars} Predicting {endpoint} {bars}')
 
@@ -103,18 +114,16 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
         for seed in seeds:
             out_dir_seed = f'{out_dir_endpoint}/{seed}'
             os.makedirs(out_dir_seed, exist_ok=True)
-            seed = seed
+            seed = int(seed)
             np.random.seed(seed)
             random.seed(seed)
             with open(f'{out_dir_seed}/best_parameters.txt', 'a+') as f:
-                f.write(f'=====\n{endpoint}\n=====')
-
-            log.info(Y.info())
+                f.write(f'{bars}\n{endpoint}\n{bars}')
 
             if nested_cv and not external_test_data:
-                    log.info(f"Using nested CV")
-                    model = nested_crossval(X, all_model_metrics, artificial_balancing_option, cv_splits, endpoint,
-                                            out_dir_seed, seed, select_features, shap_eval, y, pretune_model=pretune_model)
+                log.info(f"Using nested CV")
+                model = nested_crossval(X, all_model_metrics, artificial_balancing_option, cv_splits, endpoint,
+                                        out_dir_seed, seed, select_features, shap_eval, y, pretune_model=pretune_model)
             else:
                 # If we do not have an external validation dataset, we split the original dataset
                 if not external_test_data:
@@ -136,35 +145,46 @@ def evaluation(seeds, out_dir, dataset, feature_set, external_test_data, imputer
                 #                                           scoring=make_scorer(average_precision_score))
                 model_grid = get_classification_model_grid(
                     'balanced' if artificial_balancing_option == 'class_weight' else None, seed=seed)
-
+                if len(model_grid) == 0:
+                    log.error(f"No model grid found")
+                    return
                 for j, (model, param_grid) in enumerate(model_grid):
-                    val_metrics, test_metrics, curves, best_model, shaps = evaluate_single_model(model, param_grid,
-                                                                                                 X_train, y_train, X_test,
-                                                                                                 y_test,
-                                                                                                 cv_splits=cv_splits,
-                                                                                                 select_features=select_features,
-                                                                                                 shap_value_eval=shap_eval,
-                                                                                                 out_dir=out_dir_seed,
-                                                                                                 sample_balancing=artificial_balancing_option,
-                                                                                                 seed=seed)
+                    # val_metrics, test_metrics, curves, best_model, shaps = evaluate_single_model(model, param_grid,
+                    test_metrics, test_curves, best_model, shaps = evaluate_single_model(model, param_grid,
+                                                                                         X_train, y_train, X_test,
+                                                                                         y_test,
+                                                                                         inner_cv_splits=5,
+                                                                                         select_features=select_features,
+                                                                                         shap_value_eval=shap_eval,
+                                                                                         out_dir=out_dir_seed,
+                                                                                         sample_balancing=artificial_balancing_option,
+                                                                                         seed=seed)
 
                     model_label = str(model.__class__.__name__)
                     # 0 for fold name
-                    all_model_metrics.loc[len(all_model_metrics.index)] = [endpoint, seed, model_label, 0, val_metrics,
-                                                                           test_metrics, curves, best_model, shaps]
+                    all_model_metrics.loc[len(all_model_metrics.index)] = [endpoint, seed, model_label, 0, 0,
+                                                                           test_metrics, test_curves, best_model, shaps]
+                    # all_model_metrics.loc[len(all_model_metrics.index)] = [endpoint, seed, model_label, 0, val_metrics,
+                    #                                                        test_metrics, curves, best_model, shaps]
                     # all_model_metrics.loc[len(all_model_metrics.index)] = [endpoint, seed, model_label, fold_iter, val_metrics,
                     #                                                        test_metrics, curves, best_model, shaps]
 
                 # if (len(model_grid) > 1):
                 #     # Save summary plots across models
                 #     generate_summary_plots(all_model_metrics, endpoint, model, out_dir_seed, y)
+        if shap_eval:
+            log.info(f"Generating SHAP summary plots for {endpoint}")
+            for model_name in all_model_metrics.model.unique():
+                # Generate summary plot for each model, endpoint
+                log.info(f"Generating SHAP summary plot for {model_name}")
+                shap_tuples = all_model_metrics[
+                    (all_model_metrics['model'] == model_name) & (all_model_metrics['endpoint'] == endpoint)]['shaps']
+                try:
+                    shap_summary(X, model_name, out_dir_endpoint, shap_tuples)
+                except Exception as e:
+                    log.error(f"Error generating SHAP summary plot for {model_name}: {e}")
 
-            # We take the shap values from all models and generate one SHAP plot per seed
-        for model_name in all_model_metrics['model'].unique():
-            shap_tuples = all_model_metrics[all_model_metrics['model'] == model_name]['shaps']
-            shap_summary(X, model_name, out_dir, shap_tuples)
-
-        metric_summarization(all_model_metrics, feature_set, offset, out_dir, start_time)
+    metric_summarization(all_model_metrics, feature_set, offset, out_dir, start_time)
 
 
 def metric_summarization(all_model_metrics, feature_set, offset, out_dir, start_time):
@@ -175,7 +195,7 @@ def metric_summarization(all_model_metrics, feature_set, offset, out_dir, start_
     results = pd.concat(
         [results.drop('validation', axis=1), pd.DataFrame(metrics['validation'].tolist()).add_suffix("_validation")],
         axis=1)
-    results.to_csv(f'{out_dir}/individual_metrics_{start_time}_offset_{offset}.csv')
+
     # Metrics to be aggregated and appear in result sheet
     metrics = ['balanced_accuracy', 'recall', 'precision', 'mcc', 'f1_score', 'roc_auc', 'avg_precision', 'prc_auc']
     # Aggregate results over seeds
@@ -184,10 +204,13 @@ def metric_summarization(all_model_metrics, feature_set, offset, out_dir, start_
     if offset is not None:
         if feature_set is not None:
             aggregated.to_csv(f'{out_dir}/aggregated_metrics_{start_time}_{"_".join(feature_set)}_offset_{offset}.csv')
+            results.to_csv(f'{out_dir}/individual_metrics_{start_time}_{"_".join(feature_set)}_offset_{offset}.csv')
         else:
             aggregated.to_csv(f'{out_dir}/aggregated_metrics_{start_time}_offset_{offset}.csv')
+            results.to_csv(f'{out_dir}/individual_metrics_{start_time}_offset_{offset}.csv')
     else:
         aggregated.to_csv(f'{out_dir}/aggregated_metrics_{start_time}.csv')
+        results.to_csv(f'{out_dir}/individual_metrics_{start_time}.csv')
     # filehandler = open(f'{out_dir}/all_model_metrics.pkl', "wb")
     # pickle.dump(all_model_metrics, filehandler)
     # filehandler.close()
@@ -215,7 +238,6 @@ def pretune(X, artificial_balancing_option, seeds, y, cv=5):
         pipeline_steps = []
         # prepare param_grid
         # param_grid = {'model__' + key: value for (key, value) in param_grid.items()}
-        select_features = False
         # if select_features:
         #     # Feature selection for each endpoint only on training data
         #     param_grid['selector'] = [
@@ -264,13 +286,13 @@ def nested_crossval(X, all_model_metrics, balancing_option, cv_splits, endpoint,
             y_train, y_test = y.iloc[train_i], y.iloc[test_i]
             # val_metrics, test_metrics, curves, best_model, shaps = evaluate_single_model(model, param_grid,
             test_metrics, test_curves, best_model, shaps = evaluate_single_model(model, param_grid,
-                                                                                         X_train, y_train, X_test, y_test,
-                                                                                         cv_splits=cv_splits,
-                                                                                         select_features=select_features,
-                                                                                         shap_value_eval=shap_eval,
-                                                                                         out_dir=out_dir_cv,
-                                                                                         sample_balancing=balancing_option,
-                                                                                         seed=seed)
+                                                                                 X_train, y_train, X_test, y_test,
+                                                                                 inner_cv_splits=cv_splits,
+                                                                                 select_features=select_features,
+                                                                                 shap_value_eval=shap_eval,
+                                                                                 out_dir=out_dir_cv,
+                                                                                 sample_balancing=balancing_option,
+                                                                                 seed=seed)
 
             # all_model_metrics[endpoint][seed][model_label]= {"validation":val_metrics, "test": test_metrics, "curves": curves}
             # all_model_metrics.loc[len(all_model_metrics.index)] = [endpoint, seed, model_label, fold_iter, val_metrics,

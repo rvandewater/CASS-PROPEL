@@ -4,8 +4,7 @@ import sklearn.metrics
 from sklearn.feature_selection import RFECV
 from sklearn.metrics import make_scorer, average_precision_score
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from sklearn.impute import KNNImputer, SimpleImputer
-from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import KNNImputer, SimpleImputer, MissingIndicator
 from xgboost import XGBClassifier
 import warnings
 # from src.utils.feature_selector import FeatureSelector
@@ -59,7 +58,7 @@ def common_preprocessing(data: Dataset,
     X[categorical_features] = X[categorical_features].fillna(value=0)
 
     # One-hot-encode categorical features
-    X = pd.get_dummies(X, columns=categorical_features, dummy_na=False, dtype="float64")
+    X = pd.get_dummies(X, columns=categorical_features, dummy_na=True, dtype="float64")
 
 
     # Apply FeatureSelector functionality
@@ -92,8 +91,12 @@ def common_preprocessing(data: Dataset,
     X_binary = X.drop(columns=[col for col in X.columns if col in data.get_numerical_features()])
     X_numerical_feature_names = X_numerical.columns
 
+
+
     # Interpolate numerical features
     if imputer is not None:
+        X_miss_numerical = generate_missing_indicators(X_numerical)
+        X_miss_binary = generate_missing_indicators(X_binary)
         log.info(f'Running {imputer} imputer...')
         if imputer == 'knn':
             imputer = KNNImputer(n_neighbors=5, weights='uniform')
@@ -103,8 +106,6 @@ def common_preprocessing(data: Dataset,
             raise ValueError(f'Imputer type {imputer} not supported')
         X_numerical = imputer.fit_transform(X_numerical)
         X_numerical = pd.DataFrame(X_numerical, columns=X_numerical_feature_names)
-
-        log.info("Imputing binary features...")
         X_binary = X_binary.fillna(value=0)
 
     if normaliser is not None:
@@ -122,7 +123,7 @@ def common_preprocessing(data: Dataset,
         X_numerical = pd.DataFrame(X_numerical, columns=X_numerical_feature_names)
 
     # Build X and y arrays
-    # X = pd.concat([X_binary, X_numerical], axis=1)
+    # X = pd.concat([X_binary, data], axis=1)
     log.info(f"Intersection:{len(X_numerical.index.intersection(X_binary.index))}")
     X = X_binary.join(X_numerical, how="outer")
     # X = X.loc[row_indices.index]
@@ -145,7 +146,22 @@ def common_preprocessing(data: Dataset,
                 log.info(
                     f'\tClass "{abs_value_counts.index[i]}":\t{abs_value_counts.iloc[i]} ({rel_value_counts.iloc[i]:.3f})')
         log.info('\n')
+    if imputer is not None:
+        # Add missing indicator if imputation was performed
+        X = X.join(X_miss_numerical)
+        X = X.join(X_miss_binary)
     return X, Y
+
+
+def generate_missing_indicators(data):
+    indicator = MissingIndicator(features='all')
+    data_miss = pd.DataFrame()
+    if len(data.columns) > 0:
+        data_miss = indicator.fit_transform(data)
+        data_miss = pd.DataFrame(data_miss, columns=[f'{col}_missing' for col in data.columns])
+        data_miss = data_miss.astype("int")
+    return data_miss
+
 
 def drop_correlated(df_in, threshold):
     df_corr = df_in.corr(method='pearson', min_periods=1)

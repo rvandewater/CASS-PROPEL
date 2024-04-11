@@ -1,3 +1,4 @@
+import logging
 import os
 import logging as log
 import matplotlib.pyplot as plt
@@ -12,7 +13,7 @@ from xgboost import XGBClassifier
 from src.preprocess import model_feature_selection
 from src.test import test_classification_model
 from src.utils.metrics import all_classification_metrics_list, compute_classification_metrics
-from src.utils.plot import plot_val_mean_prec_rec, plot_val_mean_roc, plot_confusion_matrix, plot_shap_values
+from src.utils.plot import plot_val_mean_prec_rec, plot_val_mean_roc, plot_confusion_matrix, calculate_plot_shap_values
 
 
 def evaluate_single_cv_split(model, param_grid,
@@ -126,33 +127,29 @@ def evaluate_single_cv_split(model, param_grid,
 
 def evaluate_single_model(model, param_grid,
                           X_train, y_train, X_test, y_test,
-                          cv_splits=5, cv_scoring='average_precision', select_features=False, shap_value_eval=False,
-                          cm_agg_type='sum', out_dir='results/default', sample_balancing=None, seed=42,
+                          inner_cv_splits=5, cv_scoring='average_precision', select_features=False, shap_value_eval=False,
+                          out_dir='results/default', sample_balancing=None, seed=42,
                           search_method=('random',30), pretune=False):
     os.makedirs(f'{out_dir}/val/', exist_ok=True)
     os.makedirs(f'{out_dir}/test/', exist_ok=True)
     model_name = str(model.__class__.__name__)
 
     # ================= SETTING UP K-FOLD OR LOO CV =================
-    if cv_splits > 0:
-        log.info(f'Evaluating model {model_name} with {cv_splits}-fold CV')
-        log.info(
-            f"Total split into Train/Test: {round(100 * len(y_train) / (len(y_train) + len(y_test)))} / {round(100 * len(y_test) / (len(y_train) + len(y_test)))}" +
-            f' - Absolute Samples: {len(y_train)}/{len(y_test)}')
-            # f'Total split into Train/Val/Test: {round(100 * (cv_splits - 1) / cv_splits * len(y_train) / (len(y_train) + len(y_test)))}/' +
+    log.info(f"Outer split into Train/Test: "
+             f"{round(100 * len(y_train) / (len(y_train) + len(y_test)))}/{round(100 * len(y_test) / (len(y_train) + len(y_test)))} === "
+             f"Absolute Samples: {len(y_train)}/{len(y_test)}")
+    if inner_cv_splits > 0:
+        log.info(f'Performing inner cv hyperparameter tuning on {model_name} with {inner_cv_splits}-fold CV')
+        log.info(f"Total inner split: {round(100*((inner_cv_splits-1)/inner_cv_splits))}/{round(100/inner_cv_splits)} === "
+                 f"Absolute Samples: {round(len(y_train)/inner_cv_splits*(inner_cv_splits-1))}/"
+                 f"{round(len(y_train) - len(y_train)/inner_cv_splits*(inner_cv_splits-1))}")
             # f'{round(100 / cv_splits * len(y_train) / (len(y_train) + len(y_test)))}/{round(100 * len(y_test) / (len(y_train) + len(y_test)))}' +
             # f' - Absolute Samples: {len(y_train) - round(len(y_train) / cv_splits)}/{round(len(y_train) / cv_splits)}/{len(y_test)}')
-
-        cv = StratifiedKFold(n_splits=cv_splits, shuffle=True, random_state=seed)
+        cv = StratifiedKFold(n_splits=inner_cv_splits, shuffle=True, random_state=seed)
     else:
-        log.info(f'Evaluating model {model_name} with LOO-CV')
-        log.info(
-            f'Total split into Train+Val/Test: {round(100 * len(y_train) / (len(y_train) + len(y_test)))}/' +
-            f'{round(100 * len(y_test) / (len(y_train) + len(y_test)))}' +
-            f' - Absolute Samples: {len(y_train) - 1}/1/{len(y_test)}')
-
+        log.info(f'Performing inner cv hyperparameter tuning on {model_name} with LOO-CV')
         cv = LeaveOneOut()
-
+    logging.info(f"Search method: {search_method}")
     # Define list with steps for the pipeline
     pipeline_steps = []
     # ================= ADD BALANCING TO PIPELINE IF SELECTED =================
@@ -199,7 +196,7 @@ def evaluate_single_model(model, param_grid,
                                       n_jobs=-1, error_score=0)
         elif search_method[0] == 'random':
             grid_model = RandomizedSearchCV(pipeline, param_distributions=param_grid, scoring=cv_scoring, verbose=False, cv=cv,
-                                            n_jobs=-1, error_score=0, n_iter=search_method[1])
+                                            n_jobs=1, error_score=0, n_iter=search_method[1])
         else:
             raise ValueError(f'Unknown method {search_method}')
         grid_model.fit(X_train, y_train)
@@ -218,7 +215,7 @@ def evaluate_single_model(model, param_grid,
             f.write(f'GridSearch Failed due to incompatible options in best selected model.\n')
         log.warning("GridSearch Failed due to incompatible options in best selected model.")
         empty_cm = np.zeros((2, 2))
-        return {metric: ([0.0] if metric != 'confusion_matrix' else [empty_cm] * cv_splits) for metric in all_metrics_list}, \
+        return {metric: ([0.0] if metric != 'confusion_matrix' else [empty_cm] * inner_cv_splits) for metric in all_metrics_list}, \
             {metric: (0.0 if metric != 'confusion_matrix' else empty_cm) for metric in all_metrics_list}, \
             (([0] * 101, [0] * 101, [0] * 101), ([0] * 101, [0] * 101, [0] * 101))
     # with open(f'{out_dir}/best_parameters.txt', 'a+') as f:
@@ -320,7 +317,7 @@ def independent_validation(X_test, X_train, all_metrics_list, best_model, cm_agg
                                                                                 (sum(y_train == 1) / len(y_train)))
     # Plot SHAP values
     if shap_value_eval:
-        plot_shap_values(X_test, X_train, y_train, cv, best_model, model_name, out_dir, select_features)
+        calculate_plot_shap_values(X_test, X_train, y_train, cv, best_model, model_name, out_dir, select_features)
     # all_model_metrics['prc_auc'] = overall_prc_auc
     plt.savefig(f'{out_dir}/val/{model_name}_roc_prc_curves'.replace(' ', '_'), bbox_inches='tight')
     plt.close()

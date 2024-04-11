@@ -1,17 +1,15 @@
 import argparse
 import logging
-
+import warnings
 from src.complete_evaluation import evaluation
 
 
 def get_parser():
-    parser = argparse.ArgumentParser('Evaluate classical ML models on post-operative complications dataset.)') # +
-                                     #'Test metrics correspond to the results of a classification threshold optimised ' +
-                                     #'based on the optimal F1-score.')
-
-    parser.add_argument('dataset', type=str, choices=['esophagus', 'pancreas', 'stomach', 'cass_prop', 'cass_preop_elect', 'cass_preop_emerg'],
+    parser = argparse.ArgumentParser('Evaluate classical ML models on post-operative complications dataset.)')
+    parser.add_argument('dataset', type=str,
+                        choices=['esophagus', 'pancreas', 'stomach', 'cass_prop', 'cass_preop_elect', 'cass_preop_emerg'],
                         help='The dataset to process.')
-    parser.add_argument('--feature_set', '-f', nargs='*', type=str, choices=["wearable", "ishmed", "copra", "pre"], #choices=['pre', 'intra', 'post', 'dyn'],
+    parser.add_argument('--feature_set', '-f', nargs='*', type=str, choices=["wearable", "ishmed", "copra", "pre"],
                         help='if given, processes only features from all provided feature sets')
     parser.add_argument('--external_test_data', '-e', action='store_true',
                         help='If specified, external validation dataset will be used as test data')
@@ -27,7 +25,7 @@ def get_parser():
                         help='deactivates feature selection in pipeline')
     parser.add_argument('--cv_splits', '-cv', type=int, default=5,
                         help='number of cross_validation splits; 1 denotes LOO-CV')
-    parser.add_argument('--shap_eval', '-sh', type=bool, default=False,
+    parser.add_argument('--shap_eval', '-sh', type=bool, default=True,
                         help='if true, shap values will be evaluated. Disabled by default, since it increases runtime a lot.')
     parser.add_argument('--test_fraction', '-t', type=float, default=0.2,
                         help='size of the test set in fraction of total samples')
@@ -42,24 +40,24 @@ def get_parser():
                         help='Threshold for dropping columns with high correlation')
     parser.add_argument('--data_exploration', '-ex', nargs='*', type=bool, default=False,
                         help='If true, an html file will be generated showing statistics of the parsed dataset')
-    parser.add_argument('--seeds', '-s', type=list, default=[000, 111, 222, 333, 444],
+    parser.add_argument('--seeds', '-s', type=int, default=[000, 111, 222, 333, 444], nargs='*',
                         help='List of seeds for reproducibility, also determines individual repetitions')
     parser.add_argument('--cores', '-c', type=int, default=8,
                         help='Number of cores to use for parallel processing')
     parser.add_argument('--offset', '-of', type=int, default=None,
                         help='Time offset')
+    parser.add_argument('--endpoints', '-ep', type=str, nargs='*', default=None,
+                        help='Endpoints to evaluate, if not all')
     return parser
 
 
 if __name__ == '__main__':
+    warnings.filterwarnings("ignore")
     log_format = "%(asctime)s - %(levelname)s - %(name)s : %(message)s"
     date_format = "%Y-%m-%d %H:%M:%S"
-    # logger = logging.getLogger()
-    # logger.setLevel(logging.INFO)
     logging.basicConfig(level=logging.INFO, format=log_format, datefmt=date_format, force=True)
     logging.info('Starting evaluation...')
     arg_parser = get_parser()
     args = arg_parser.parse_args()
-    # print(args)
-
+    logging.debug(args)
     evaluation(**vars(args))

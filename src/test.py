@@ -9,10 +9,11 @@ import logging as log
 from src.models import get_feature_importance, positive_class_probability
 from src.utils.metrics import compute_classification_metrics
 from src.utils.plot import plot_coefficients, plot_roc_pr_curve, plot_confusion_matrix, plot_calibration_curves, \
-    plot_shap_values
+    calculate_plot_shap_values
+from imblearn.pipeline import Pipeline as imblearn_pipeline
+from sklearn.pipeline import Pipeline as sklearn_pipeline
 
-
-def test_classification_model(model, X_train, y_train, X_test, y_test, model_name, selector, out_dir, calibration=True):
+def test_classification_model(model, X_train, y_train, X_test, y_test, model_name, selector, out_dir, calibration=False):
     if calibration:
         log.info("Calibrating model")
         #Re-fit complete training set
@@ -45,8 +46,14 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
     # # estimator = model.estimator.named_steps['model']
     # # selector = model.estimator.named_steps['selector']
     if isinstance(model, CalibratedClassifierCV):
-        log.info(f"Extracting estimator from calibrated wrapper")
+        log.debug(f"Extracting estimator from calibrated wrapper")
         estimator = model.calibrated_classifiers_[0].estimator#.named_steps['model']
+    elif isinstance(model, imblearn_pipeline):
+        estimator = model.named_steps['model']
+    elif isinstance(model, sklearn_pipeline):
+        estimator = model.named_steps['model']
+    else:
+        estimator = model
     # # if select_features:
     # #     selector = model.calibrated_classifiers_[0].estimator.named_steps['selector']
     # estimator = model
@@ -54,7 +61,7 @@ def test_classification_model(model, X_train, y_train, X_test, y_test, model_nam
     # ===== Feature Importances =====
     # log.info(f"Estimator: {estimator.estimator}")
     feature_importances = get_feature_importance(estimator)
-    shaps = plot_shap_values(X_test, X_train, y_train, estimator, model_name, out_dir, False)
+    shaps = calculate_plot_shap_values(X_test, X_train, y_train, estimator, model_name, out_dir, False)
 
     if selector:
         feature_names = X_train.columns[selector.get_support()]
