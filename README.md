@@ -1,4 +1,5 @@
 # CASS-PROPEL (Clinical ASSist AND aleRt Algorithms - Patient Risk/Outcome Prediction and EvaLuation)
+[All CASSANDRA repositories](https://github.com/stars/rvandewater/lists/cassandra)
 
 **Complete evaluation of traditional "SK-learn like" machine learning models for post-operative complications**
 
